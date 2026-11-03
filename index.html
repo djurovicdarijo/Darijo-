@@ -1,0 +1,1599 @@
+<!DOCTYPE html>
+<html lang="sr" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0b0f14">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>TRAILCOMMAND – Off-Road Operations & Fleet Maintenance Center</title>
+<link rel="manifest" id="manifestLink" href="">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<style>
+/* =====================================================================
+   TRAILCOMMAND – vizuelni identitet (HUD / kokpit)
+   ===================================================================== */
+:root{
+  --bg:#0b0f14; --bg2:#0f151c; --panel:rgba(16,23,31,.72); --panel2:rgba(22,31,42,.85);
+  --line:rgba(0,229,255,.16); --line2:rgba(255,255,255,.08);
+  --text:#e6edf3; --muted:#8b98a8; --dim:#5c6975;
+  --cyan:#00e5ff; --cyan2:rgba(0,229,255,.14); --amber:#ffb020; --amber2:rgba(255,176,32,.14);
+  --green:#2ee6a6; --red:#ff4d5e; --yellow:#ffd23f; --blue:#5aa9ff; --purple:#b388ff;
+  --glow:0 0 18px rgba(0,229,255,.25);
+  --r:12px; --sans:'Inter',system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; --mono:'JetBrains Mono','IBM Plex Mono',ui-monospace,Menlo,monospace;
+  --sidebar:232px; --topbar:56px;
+}
+[data-theme="light"]{
+  --bg:#eef2f6; --bg2:#e4e9ef; --panel:rgba(255,255,255,.78); --panel2:rgba(255,255,255,.95);
+  --line:rgba(0,120,140,.22); --line2:rgba(0,0,0,.08);
+  --text:#101820; --muted:#51606e; --dim:#8794a1;
+  --cyan:#0097a7; --cyan2:rgba(0,151,167,.12); --amber:#c77700; --amber2:rgba(199,119,0,.12);
+  --glow:0 0 12px rgba(0,151,167,.18);
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;height:100%}
+body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:14px;line-height:1.45;overflow:hidden;
+  background-image:
+    linear-gradient(var(--line2) 1px,transparent 1px),
+    linear-gradient(90deg,var(--line2) 1px,transparent 1px),
+    radial-gradient(ellipse at 20% 0%,rgba(0,229,255,.08),transparent 55%),
+    radial-gradient(ellipse at 100% 100%,rgba(255,176,32,.06),transparent 50%);
+  background-size:40px 40px,40px 40px,100% 100%,100% 100%;}
+body::after{content:"";position:fixed;inset:0;pointer-events:none;z-index:9000;opacity:.35;
+  background:repeating-linear-gradient(0deg,rgba(255,255,255,.025) 0 1px,transparent 1px 3px);
+  animation:scan 9s linear infinite;mix-blend-mode:overlay}
+[data-theme="light"] body::after{opacity:.12}
+@keyframes scan{from{background-position:0 0}to{background-position:0 120px}}
+.mono{font-family:var(--mono)}
+a{color:var(--cyan)}
+h1,h2,h3,h4{margin:0;font-weight:600;letter-spacing:.2px}
+h2{font-size:17px}h3{font-size:14px;text-transform:uppercase;letter-spacing:1px;color:var(--muted);font-weight:600}
+svg.i{width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.hidden{display:none!important}
+
+/* ---- layout ---- */
+#app{display:grid;grid-template-columns:var(--sidebar) 1fr;grid-template-rows:var(--topbar) 1fr;height:100%;
+  padding-top:env(safe-area-inset-top)}
+#topbar{grid-column:1/3;display:flex;align-items:center;gap:14px;padding:0 16px;border-bottom:1px solid var(--line);
+  background:var(--panel);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);position:relative;z-index:50}
+#topbar::after{content:"";position:absolute;left:0;right:0;bottom:-1px;height:1px;background:linear-gradient(90deg,transparent,var(--cyan),transparent);opacity:.6}
+.logo{display:flex;align-items:center;gap:10px;font-weight:700;letter-spacing:2px;font-size:15px}
+.logo .mark{width:30px;height:30px;border:1px solid var(--cyan);border-radius:7px;display:grid;place-items:center;box-shadow:var(--glow);color:var(--cyan)}
+.logo small{display:block;font-weight:400;letter-spacing:1px;font-size:9px;color:var(--muted)}
+.tb-sp{flex:1}
+.clock{font-family:var(--mono);font-size:13px;text-align:right;line-height:1.2}
+.clock b{font-size:16px;color:var(--cyan);font-weight:500}
+.clock span{color:var(--muted);font-size:11px}
+.conn{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:1px}
+.conn i{width:8px;height:8px;border-radius:50%;background:var(--green);box-shadow:0 0 8px var(--green)}
+.conn.off i{background:var(--red);box-shadow:0 0 8px var(--red)}
+.conn.cloud i{background:var(--cyan);box-shadow:0 0 8px var(--cyan)}
+.user{display:flex;align-items:center;gap:8px;font-size:12px;padding:6px 10px;border:1px solid var(--line);border-radius:20px;cursor:pointer}
+.user .av{width:22px;height:22px;border-radius:50%;background:linear-gradient(135deg,var(--cyan),var(--purple));display:grid;place-items:center;font-size:11px;font-weight:700;color:#000}
+.user .role{color:var(--muted);font-size:10px;text-transform:uppercase}
+.ibtn{background:none;border:1px solid var(--line);color:var(--text);width:36px;height:36px;border-radius:9px;display:grid;place-items:center;cursor:pointer;transition:.15s}
+.ibtn:hover{border-color:var(--cyan);color:var(--cyan);box-shadow:var(--glow)}
+.ibtn.spin svg{animation:rot 1s linear infinite}
+@keyframes rot{to{transform:rotate(360deg)}}
+
+#sidebar{border-right:1px solid var(--line);background:var(--panel);backdrop-filter:blur(14px);overflow:auto;padding:12px 10px;display:flex;flex-direction:column;gap:2px}
+#sidebar .sec{font-size:10px;text-transform:uppercase;letter-spacing:1.6px;color:var(--dim);padding:12px 10px 4px}
+.navb{display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:9px;color:var(--muted);cursor:pointer;border:1px solid transparent;font-size:13px;position:relative;background:none;width:100%;text-align:left;font-family:inherit}
+.navb:hover{color:var(--text);background:var(--line2)}
+.navb.active{color:var(--cyan);background:var(--cyan2);border-color:var(--line)}
+.navb.active::before{content:"";position:absolute;left:-10px;top:8px;bottom:8px;width:3px;background:var(--cyan);border-radius:2px;box-shadow:var(--glow)}
+.navb .badge{margin-left:auto;background:var(--red);color:#fff;font-size:10px;font-family:var(--mono);padding:1px 6px;border-radius:10px}
+.navb .badge.amber{background:var(--amber);color:#000}
+
+#main{overflow:auto;padding:18px 20px 40px;position:relative;scroll-behavior:smooth}
+.view{display:none;animation:fade .3s ease}
+.view.active{display:block}
+@keyframes fade{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+.vhead{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;margin-bottom:14px;flex-wrap:wrap}
+.vhead h1{font-size:22px;font-weight:700;letter-spacing:1px;text-transform:uppercase}
+.vhead h1 small{display:block;font-size:11px;color:var(--muted);font-weight:400;letter-spacing:1.5px;font-family:var(--mono);margin-top:2px}
+.vhead .tools{display:flex;gap:8px;flex-wrap:wrap}
+
+/* ---- cards ---- */
+.card{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:16px;backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);position:relative;
+  box-shadow:0 10px 30px rgba(0,0,0,.25),inset 0 1px 0 rgba(255,255,255,.04);animation:fade .4s ease both}
+.card::before{content:"";position:absolute;top:0;left:12px;right:12px;height:1px;background:linear-gradient(90deg,transparent,var(--line),transparent)}
+.card.amber{border-color:rgba(255,176,32,.35)}
+.card.red{border-color:rgba(255,77,94,.4);box-shadow:0 0 20px rgba(255,77,94,.12)}
+.card h3{margin-bottom:10px;display:flex;align-items:center;gap:8px}
+.card h3 .r{margin-left:auto;display:flex;gap:6px}
+.grid{display:grid;gap:14px}
+.g2{grid-template-columns:repeat(2,1fr)}.g3{grid-template-columns:repeat(3,1fr)}.g4{grid-template-columns:repeat(4,1fr)}
+.span2{grid-column:span 2}
+.stat{display:flex;flex-direction:column;gap:4px}
+.stat .lbl{font-size:10px;text-transform:uppercase;letter-spacing:1.4px;color:var(--muted)}
+.stat .val{font-family:var(--mono);font-size:30px;font-weight:500;color:var(--cyan);line-height:1;text-shadow:0 0 14px rgba(0,229,255,.3)}
+.stat .val.amber{color:var(--amber);text-shadow:0 0 14px rgba(255,176,32,.3)}
+.stat .val.red{color:var(--red);text-shadow:0 0 14px rgba(255,77,94,.3)}
+.stat .val.green{color:var(--green)}
+.stat .val small{font-size:12px;color:var(--muted);text-shadow:none;margin-left:4px;font-family:var(--sans)}
+.stat .sub{font-size:11px;color:var(--muted)}
+.corner{position:absolute;width:10px;height:10px;border-color:var(--cyan);border-style:solid;opacity:.6}
+.corner.tl{top:-1px;left:-1px;border-width:1px 0 0 1px;border-radius:var(--r) 0 0 0}
+.corner.br{bottom:-1px;right:-1px;border-width:0 1px 1px 0;border-radius:0 0 var(--r) 0}
+
+/* ---- buttons / forms ---- */
+.btn{display:inline-flex;align-items:center;gap:7px;background:var(--cyan2);color:var(--cyan);border:1px solid var(--line);border-radius:9px;padding:8px 13px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;transition:.15s;white-space:nowrap}
+.btn:hover{box-shadow:var(--glow);border-color:var(--cyan)}
+.btn.primary{background:var(--cyan);color:#021014;border-color:var(--cyan)}
+.btn.amber{background:var(--amber2);color:var(--amber);border-color:rgba(255,176,32,.35)}
+.btn.danger{background:rgba(255,77,94,.12);color:var(--red);border-color:rgba(255,77,94,.35)}
+.btn.ghost{background:transparent;color:var(--muted)}
+.btn.sm{padding:5px 9px;font-size:12px;border-radius:7px}
+.btn.xs{padding:3px 7px;font-size:11px;border-radius:6px}
+.btn.full{width:100%;justify-content:center}
+.btn:disabled{opacity:.4;cursor:not-allowed}
+label.f{display:block;font-size:10px;text-transform:uppercase;letter-spacing:1.3px;color:var(--muted);margin:10px 0 4px}
+input,select,textarea{width:100%;background:rgba(0,0,0,.25);border:1px solid var(--line2);color:var(--text);border-radius:8px;padding:9px 11px;font-size:14px;font-family:inherit;outline:none;transition:.15s}
+[data-theme="light"] input,[data-theme="light"] select,[data-theme="light"] textarea{background:rgba(255,255,255,.8)}
+input:focus,select:focus,textarea:focus{border-color:var(--cyan);box-shadow:var(--glow)}
+input.err{border-color:var(--red)}
+input[type=number]{font-family:var(--mono)}
+textarea{min-height:64px;resize:vertical}
+select option{background:#101820;color:#fff}
+.f2{display:grid;grid-template-columns:1fr 1fr;gap:10px}.f3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}
+.chk{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--line2);cursor:pointer}
+.chk input{width:20px;height:20px;accent-color:var(--cyan)}
+.chk.done{color:var(--muted);text-decoration:line-through}
+.chips{display:flex;gap:6px;flex-wrap:wrap}
+.chip{font-size:11px;padding:3px 9px;border-radius:20px;border:1px solid var(--line2);color:var(--muted);cursor:pointer;background:none;font-family:inherit}
+.chip.on{border-color:var(--cyan);color:var(--cyan);background:var(--cyan2)}
+.tag{font-size:10px;padding:2px 7px;border-radius:5px;font-family:var(--mono);text-transform:uppercase;letter-spacing:.5px;border:1px solid}
+.tag.ok{color:var(--green);border-color:rgba(46,230,166,.4)}.tag.warn{color:var(--yellow);border-color:rgba(255,210,63,.4)}.tag.bad{color:var(--red);border-color:rgba(255,77,94,.5);background:rgba(255,77,94,.1)}
+.tag.info{color:var(--cyan);border-color:var(--line)}.tag.dim{color:var(--muted);border-color:var(--line2)}
+
+/* ---- tables / lists ---- */
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{font-size:10px;text-transform:uppercase;letter-spacing:1.2px;color:var(--muted);text-align:left;padding:6px 8px;border-bottom:1px solid var(--line)}
+td{padding:8px;border-bottom:1px solid var(--line2);vertical-align:middle}
+td.num,th.num{font-family:var(--mono);text-align:right}
+tr.clickable{cursor:pointer}tr.clickable:hover td{background:var(--line2)}
+.tscroll{overflow:auto;-webkit-overflow-scrolling:touch}
+.li{display:flex;gap:10px;align-items:center;padding:9px 0;border-bottom:1px solid var(--line2)}
+.li:last-child{border-bottom:0}
+.li .t{flex:1;min-width:0}.li .t b{display:block;font-weight:600}.li .t small{color:var(--muted);display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.li .mono{font-size:12px}
+.empty{text-align:center;color:var(--dim);padding:26px 10px;font-size:13px}
+.bar{height:5px;background:var(--line2);border-radius:3px;overflow:hidden}
+.bar i{display:block;height:100%;border-radius:3px;background:var(--cyan);transition:width .8s cubic-bezier(.2,.8,.2,1)}
+.bar i.ok{background:var(--green)}.bar i.warn{background:var(--yellow)}.bar i.bad{background:var(--red)}
+.diff{display:inline-flex;gap:2px}.diff i{width:9px;height:9px;border-radius:2px;background:var(--line2)}
+.diff i.on{background:var(--amber)}
+
+/* ---- gauges ---- */
+.gauges{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px}
+.gauge{text-align:center;padding:12px 8px;border:1px solid var(--line2);border-radius:10px;background:rgba(0,0,0,.15);cursor:pointer;transition:.15s}
+.gauge:hover{border-color:var(--cyan)}
+.gauge svg{width:110px;height:70px;display:block;margin:0 auto}
+.gauge .gv{font-family:var(--mono);font-size:18px;margin-top:2px;font-weight:500}
+.gauge .gn{font-size:11px;color:var(--muted);margin-top:4px;line-height:1.25;min-height:28px}
+.gauge .gs{font-size:10px;font-family:var(--mono);color:var(--dim)}
+.gauge.bad{border-color:rgba(255,77,94,.5);box-shadow:0 0 16px rgba(255,77,94,.15);animation:pulse 1.6s infinite}
+@keyframes pulse{0%,100%{box-shadow:0 0 10px rgba(255,77,94,.1)}50%{box-shadow:0 0 22px rgba(255,77,94,.35)}}
+
+/* ---- map ---- */
+#map{height:calc(100vh - var(--topbar) - 120px);min-height:380px;border-radius:var(--r);border:1px solid var(--line);background:#0e1419;z-index:1}
+.maprow{display:grid;grid-template-columns:1fr 330px;gap:14px}
+.mapside{display:flex;flex-direction:column;gap:12px;max-height:calc(100vh - var(--topbar) - 120px);overflow:auto}
+.leaflet-container{font-family:var(--sans);background:#0e1419}
+.leaflet-popup-content-wrapper,.leaflet-popup-tip{background:#101820;color:#e6edf3;border:1px solid var(--line);box-shadow:0 10px 30px rgba(0,0,0,.5)}
+.leaflet-popup-content{margin:12px 14px;font-size:13px;min-width:200px}
+.leaflet-popup-content b.t{font-size:14px;display:block;margin-bottom:4px}
+.leaflet-bar a{background:#101820;color:#e6edf3;border-color:var(--line)}
+.leaflet-bar a:hover{background:#18222e}
+.leaflet-control-attribution{background:rgba(0,0,0,.5)!important;color:#8b98a8!important;font-size:9px}
+.leaflet-control-attribution a{color:#8b98a8!important}
+.pin{position:relative;width:30px;height:30px}
+.pin .b{position:absolute;inset:0;border-radius:50% 50% 50% 0;transform:rotate(-45deg);border:2px solid #0b0f14;box-shadow:0 2px 8px rgba(0,0,0,.6)}
+.pin svg{position:absolute;left:7px;top:6px;width:16px;height:16px;stroke:#0b0f14;fill:none;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}
+.pin.me .b{border-radius:50%;transform:none;background:var(--cyan);box-shadow:0 0 0 6px rgba(0,229,255,.25)}
+.maptb{position:absolute;top:12px;left:56px;z-index:800;display:flex;gap:6px;flex-wrap:wrap}
+.maptb .btn{backdrop-filter:blur(8px);background:rgba(16,23,31,.85)}
+.maptb .btn.on{background:var(--cyan);color:#021014}
+.photo-grid{display:flex;gap:6px;flex-wrap:wrap}
+.photo-grid img{width:64px;height:64px;object-fit:cover;border-radius:6px;border:1px solid var(--line2);cursor:pointer}
+.wx{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;text-align:center}
+.wx .v{font-family:var(--mono);font-size:18px;color:var(--cyan)}
+.wx .l{font-size:10px;color:var(--muted);text-transform:uppercase}
+.comment{padding:6px 0;border-bottom:1px solid var(--line2);font-size:12px}
+.comment b{color:var(--cyan)}.comment small{color:var(--dim);margin-left:6px}
+
+/* ---- modal / drawer ---- */
+.modal{position:fixed;inset:0;background:rgba(3,6,10,.7);backdrop-filter:blur(4px);display:none;align-items:center;justify-content:center;z-index:5000;padding:16px}
+.modal.open{display:flex}
+.sheet{background:var(--panel2);border:1px solid var(--line);border-radius:14px;width:100%;max-width:640px;max-height:92vh;overflow:auto;padding:20px;box-shadow:0 30px 80px rgba(0,0,0,.6),var(--glow);animation:fade .25s ease}
+.sheet.wide{max-width:900px}
+.sheet h2{display:flex;align-items:center;gap:8px;margin-bottom:6px}
+.sheet h2 .x{margin-left:auto}
+.actions{display:flex;gap:8px;margin-top:18px;justify-content:flex-end;flex-wrap:wrap}
+.toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%) translateY(20px);background:#101820;border:1px solid var(--line);color:var(--text);padding:10px 16px;border-radius:10px;font-size:13px;opacity:0;transition:.25s;z-index:9500;pointer-events:none;box-shadow:var(--glow);display:flex;gap:10px;align-items:center;max-width:90vw}
+.toast.show{opacity:1;transform:translateX(-50%)}
+.toast.err{border-color:var(--red)}
+.toast .undo{pointer-events:auto;color:var(--cyan);cursor:pointer;font-weight:600}
+.search-res{max-height:50vh;overflow:auto;margin-top:10px}
+.kbd{font-family:var(--mono);font-size:10px;border:1px solid var(--line2);border-radius:4px;padding:1px 5px;color:var(--muted)}
+.feed{font-size:12px}
+.feed .li small{white-space:normal}
+.online{display:flex;gap:6px;flex-wrap:wrap}
+.online span{display:flex;align-items:center;gap:5px;font-size:11px;padding:3px 8px;border:1px solid var(--line2);border-radius:20px}
+.online i{width:7px;height:7px;border-radius:50%;background:var(--green);box-shadow:0 0 6px var(--green)}
+.tabs{display:flex;gap:4px;border-bottom:1px solid var(--line);margin-bottom:14px;overflow:auto}
+.tabs button{background:none;border:0;border-bottom:2px solid transparent;color:var(--muted);padding:8px 12px;font-size:13px;cursor:pointer;font-family:inherit;white-space:nowrap}
+.tabs button.active{color:var(--cyan);border-bottom-color:var(--cyan)}
+.vsel{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px}
+.vsel button{background:var(--panel);border:1px solid var(--line2);border-radius:10px;padding:8px 14px;color:var(--muted);cursor:pointer;font-family:inherit;display:flex;align-items:center;gap:8px;font-size:13px}
+.vsel button.active{border-color:var(--cyan);color:var(--cyan);box-shadow:var(--glow)}
+.vsel .st{width:8px;height:8px;border-radius:50%}
+.spec{display:grid;grid-template-columns:1fr 1fr;gap:4px 14px;font-size:12px}
+.spec div{display:flex;justify-content:space-between;gap:8px;padding:5px 0;border-bottom:1px solid var(--line2)}
+.spec div span:last-child{font-family:var(--mono);color:var(--cyan);text-align:right}
+.sos-big{font-family:var(--mono);font-size:22px;color:var(--amber);text-align:center;padding:14px;border:1px dashed rgba(255,176,32,.5);border-radius:10px;margin:10px 0;word-break:break-all}
+.sig{border:1px dashed var(--line);border-radius:8px;background:rgba(0,0,0,.2);touch-action:none;width:100%;height:120px}
+canvas.chart{width:100%!important;max-height:260px}
+.printonly{display:none}
+
+/* ---- mobile ---- */
+#bottomnav{display:none}
+@media (max-width:900px){
+  :root{--sidebar:0px}
+  #app{grid-template-columns:1fr}
+  #sidebar{display:none}
+  #main{padding:12px 12px calc(84px + env(safe-area-inset-bottom))}
+  #bottomnav{display:flex;position:fixed;left:0;right:0;bottom:0;background:var(--panel2);border-top:1px solid var(--line);z-index:100;padding-bottom:env(safe-area-inset-bottom);backdrop-filter:blur(14px)}
+  #bottomnav button{flex:1;background:none;border:0;color:var(--muted);padding:9px 0 7px;font-size:10px;display:flex;flex-direction:column;align-items:center;gap:3px;font-family:inherit;position:relative}
+  #bottomnav button.active{color:var(--cyan)}
+  #bottomnav button .badge{position:absolute;top:4px;right:calc(50% - 20px);background:var(--red);color:#fff;font-size:9px;padding:0 5px;border-radius:8px;font-family:var(--mono)}
+  .g2,.g3,.g4{grid-template-columns:1fr 1fr}
+  .g3 .span2,.g4 .span2{grid-column:span 2}
+  .maprow{grid-template-columns:1fr}
+  .mapside{max-height:none}
+  #map{height:62vh;min-height:320px}
+  .clock span{display:none}.user .nm{display:none}.conn b{display:none}
+  .f3{grid-template-columns:1fr 1fr}
+  .vhead h1{font-size:18px}
+  .stat .val{font-size:24px}
+  .spec{grid-template-columns:1fr}
+  .maptb{left:12px;top:56px}
+}
+@media (max-width:480px){.g2,.g3{grid-template-columns:1fr}.g4{grid-template-columns:1fr 1fr}.g3 .span2,.g4 .span2{grid-column:auto}.f2{grid-template-columns:1fr}.card{padding:12px}
+  #topbar{gap:8px;padding:0 10px}.logo>div:last-child{display:none}.logo .mark{width:28px;height:28px}.clock b{font-size:14px}.ibtn{width:32px;height:32px}.user{padding:4px 6px}.user>div:last-child{display:none}.conn{display:none}
+  .vhead h1{font-size:16px}.vhead h1 small{font-size:9px}.btn.sm{padding:5px 8px;font-size:12px}.gauges{grid-template-columns:repeat(2,1fr)}.stat .val{font-size:22px}}
+@media print{
+  body{background:#fff;color:#000;overflow:visible}body::after{display:none}
+  #topbar,#sidebar,#bottomnav,.noprint,.modal,.toast{display:none!important}
+  #app{display:block}#main{overflow:visible;padding:0}
+  .view{display:none!important}.printonly{display:block!important;color:#000}
+  .printonly table{font-size:11px}.printonly th,.printonly td{border:1px solid #999;padding:4px 6px;color:#000}
+  .printonly h1{font-size:20px}.printonly h2{font-size:15px;margin-top:16px}
+}
+</style>
+</head>
+<body>
+<div id="app">
+  <!-- ================= TOP BAR ================= -->
+  <header id="topbar">
+    <div class="logo">
+      <div class="mark"><svg class="i" viewBox="0 0 24 24"><path d="M3 17l4-9 4 6 3-4 4 7"/><path d="M2 21h20"/><circle cx="18" cy="5" r="2"/></svg></div>
+      <div>TRAILCOMMAND<small data-i>tagline</small></div>
+    </div>
+    <div class="tb-sp"></div>
+    <div class="conn" id="conn"><i></i><b data-i>local_mode</b></div>
+    <div class="clock"><b id="clock">--:--:--</b><br><span id="clockDate"></span></div>
+    <div class="user" data-act="openUser"><div class="av" id="userAv">?</div><div><div class="nm" id="userName">Gost</div><div class="role" id="userRole">guest</div></div></div>
+    <button class="ibtn" data-act="search" title="Ctrl+K"><svg class="i" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg></button>
+    <button class="ibtn" data-act="undo" id="undoBtn" title="Undo"><svg class="i" viewBox="0 0 24 24"><path d="M3 7v6h6"/><path d="M21 17a9 9 0 0 0-15-6.7L3 13"/></svg></button>
+    <button class="ibtn" data-act="sync" id="syncBtn" title="Sync"><svg class="i" viewBox="0 0 24 24"><path d="M21 12a9 9 0 0 1-15.5 6.3L3 16"/><path d="M3 12a9 9 0 0 1 15.5-6.3L21 8"/><path d="M21 3v5h-5"/><path d="M3 21v-5h5"/></svg></button>
+  </header>
+
+  <!-- ================= SIDEBAR ================= -->
+  <aside id="sidebar"></aside>
+
+  <!-- ================= MAIN ================= -->
+  <main id="main">
+    <section class="view" id="v-dashboard"></section>
+    <section class="view" id="v-map">
+      <div class="vhead"><h1><span data-i>nav_map</span><small>TACTICAL MAP · OSM / SAT / TOPO</small></h1>
+        <div class="tools">
+          <button class="btn sm" data-act="addPoiCoords"><svg class="i" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg><span data-i>poi_by_coords</span></button>
+          <label class="btn sm" style="cursor:pointer"><svg class="i" viewBox="0 0 24 24"><path d="M12 3v12M7 10l5 5 5-5"/><path d="M4 21h16"/></svg><span data-i>import_gpx</span><input type="file" accept=".gpx,.kml" class="hidden" id="gpxFile"></label>
+          <button class="btn sm" data-act="exportGpx"><svg class="i" viewBox="0 0 24 24"><path d="M12 21V9M7 14l5-5 5 5"/><path d="M4 3h16"/></svg>GPX</button>
+          <button class="btn sm" data-act="exportKml">KML</button>
+        </div></div>
+      <div class="maprow">
+        <div style="position:relative">
+          <div id="map"></div>
+          <div class="maptb">
+            <button class="btn sm" data-act="layer" data-v="osm" id="ly-osm">OSM</button>
+            <button class="btn sm" data-act="layer" data-v="sat" id="ly-sat">SAT</button>
+            <button class="btn sm" data-act="layer" data-v="topo" id="ly-topo">TOPO</button>
+            <button class="btn sm" data-act="toggleHeat" id="heatBtn">HEAT</button>
+            <button class="btn sm" data-act="drawRoute" id="drawBtn" data-i>draw_route</button>
+            <button class="btn sm" data-act="measure" id="measureBtn" data-i>measure</button>
+            <button class="btn sm" data-act="locate"><svg class="i" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/><circle cx="12" cy="12" r="8"/></svg></button>
+          </div>
+        </div>
+        <div class="mapside">
+          <div class="card" style="padding:12px">
+            <h3 data-i>filters</h3>
+            <input id="fText" placeholder="Pretraga..." style="margin-bottom:8px">
+            <div class="chips" id="fCats"></div>
+            <div class="f2" style="margin-top:8px">
+              <div><label class="f" data-i>min_diff</label><select id="fDiff"><option value="0">1+</option><option value="2">2+</option><option value="3">3+</option><option value="4">4+</option><option value="5">5</option></select></div>
+              <div><label class="f" data-i>author</label><select id="fAuthor"><option value="">—</option></select></div>
+            </div>
+            <label class="f"><span data-i>radius_from_me</span> (<span id="fRadV">∞</span> km)</label>
+            <input type="range" id="fRad" min="0" max="300" step="10" value="0">
+          </div>
+          <div class="card" style="padding:12px" id="routeCard"></div>
+          <div class="card" style="padding:12px"><h3><span data-i>points</span> <span class="tag info" id="poiCount">0</span></h3><div id="poiList"></div></div>
+        </div>
+      </div>
+    </section>
+    <section class="view" id="v-fleet"></section>
+    <section class="view" id="v-service"></section>
+    <section class="view" id="v-trips"></section>
+    <section class="view" id="v-fuel"></section>
+    <section class="view" id="v-parts"></section>
+    <section class="view" id="v-costs"></section>
+    <section class="view" id="v-checklist"></section>
+    <section class="view" id="v-planner"></section>
+    <section class="view" id="v-sos"></section>
+    <section class="view" id="v-analytics"></section>
+    <section class="view" id="v-team"></section>
+    <section class="view" id="v-settings"></section>
+    <div class="printonly" id="printArea"></div>
+  </main>
+
+  <nav id="bottomnav"></nav>
+</div>
+
+<div class="modal" id="modal"><div class="sheet" id="sheet"></div></div>
+<div class="toast" id="toast"></div>
+<input type="file" id="hiddenFile" class="hidden">
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script>
+/* =====================================================================
+   TRAILCOMMAND – JEDAN FAJL, MODULARNA ORGANIZACIJA
+   ---------------------------------------------------------------------
+   Sekcije:  CORE (state, persist, i18n, UI alati)  →  SEED (demo podaci)
+             →  MAP  →  FLEET  →  MODULES  →  CLOUD (Firebase)  →  INIT
+   Svi podaci žive u jednom objektu  S  i čuvaju se preko  persist().
+   Svaka izmena ide kroz  mutate(fn, opis)  koja pravi undo snimak,
+   upisuje aktivnost i (ako je uključen) šalje na Firebase.
+   ===================================================================== */
+'use strict';
+
+/* ------------------------------------------------------------------ */
+/*  CORE: helpers                                                      */
+/* ------------------------------------------------------------------ */
+const $ = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+const today = () => new Date().toISOString().slice(0, 10);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const n1 = x => (Math.round((+x || 0) * 10) / 10).toLocaleString('sr-Latn', { maximumFractionDigits: 1 });
+const n0 = x => Math.round(+x || 0).toLocaleString('sr-Latn');
+const money = x => n0(x) + ' RSD';
+const fmtD = d => { if (!d) return '—'; const [y, m, dd] = String(d).slice(0, 10).split('-'); return `${dd}.${m}.${y}.`; };
+const daysBetween = (a, b) => Math.round((new Date(b) - new Date(a)) / 864e5);
+const monthKey = d => String(d).slice(0, 7);
+const clamp = (x, a, b) => Math.max(a, Math.min(b, x));
+const haversine = (a, b) => { const R = 6371, dLat = (b[0] - a[0]) * Math.PI / 180, dLng = (b[1] - a[1]) * Math.PI / 180; const s = Math.sin(dLat / 2) ** 2 + Math.cos(a[0] * Math.PI / 180) * Math.cos(b[0] * Math.PI / 180) * Math.sin(dLng / 2) ** 2; return 2 * R * Math.asin(Math.sqrt(s)); };
+const pathLength = pts => pts.reduce((acc, p, i) => i ? acc + haversine(pts[i - 1], p) : 0, 0);
+
+/* jedinice */
+const U = {
+  dist: km => S.settings.units === 'mi' ? n1(km * 0.621371) + ' mi' : n1(km) + ' km',
+  distN: km => S.settings.units === 'mi' ? +(km * 0.621371).toFixed(1) : +(+km).toFixed(1),
+  distU: () => S.settings.units === 'mi' ? 'mi' : 'km',
+  temp: c => S.settings.tempUnit === 'F' ? Math.round(c * 9 / 5 + 32) + '°F' : Math.round(c) + '°C',
+};
+
+/* ------------------------------------------------------------------ */
+/*  CORE: i18n                                                         */
+/* ------------------------------------------------------------------ */
+const I18N = {
+  sr: {
+    tagline: 'OFF-ROAD OPERATIONS CENTER', local_mode: 'Lokalni mod', cloud_mode: 'Cloud', offline: 'Offline',
+    nav_dashboard: 'Komandna tabla', nav_map: 'Mapa', nav_fleet: 'Flota', nav_service: 'Servisna knjižica', nav_trips: 'Vožnje',
+    nav_fuel: 'Gorivo', nav_parts: 'Rezervni delovi', nav_costs: 'Troškovi', nav_checklist: 'Pre-ride lista', nav_planner: 'Planer izlazaka',
+    nav_sos: 'SOS kartica', nav_analytics: 'Analitika', nav_team: 'Tim', nav_settings: 'Podešavanja',
+    sec_ops: 'Operacije', sec_fleet: 'Flota i održavanje', sec_more: 'Više',
+    poi_by_coords: 'Tačka (koordinate)', import_gpx: 'Uvezi GPX/KML', draw_route: 'Crtaj rutu', measure: 'Merenje', filters: 'Filteri',
+    min_diff: 'Min. težina', author: 'Autor', radius_from_me: 'Udaljenost od mene', points: 'Tačke',
+    save: 'Sačuvaj', cancel: 'Otkaži', delete: 'Obriši', edit: 'Izmeni', add: 'Dodaj', close: 'Zatvori', confirm: 'Potvrdi', yes: 'Da', no: 'Ne',
+    name: 'Naziv', category: 'Kategorija', difficulty: 'Težina', description: 'Opis', photos: 'Fotografije', date: 'Datum', hours: 'Sati', km: 'Km',
+    vehicle: 'Vozilo', notes: 'Beleške', cost: 'Cena', total: 'Ukupno', urgent: 'HITNO', soon: 'USKORO', ok: 'OK',
+    undo_done: 'Vraćeno', saved: 'Sačuvano', deleted: 'Obrisano', confirm_delete: 'Da li sigurno želiš da obrišeš?', no_permission: 'Nemaš dozvolu za ovu akciju.',
+    total_hours: 'Ukupno radnih sati', total_km: 'Ukupno kilometara', since_service: 'Sati od servisa', next_service: 'Sledeći servis',
+    overdue_items: 'Prekoračeni intervali', warnings: 'Upozorenja', add_trip: 'Upiši vožnju', add_service: 'Upiši servis', add_fuel: 'Upiši točenje',
+    wear: 'istrošenost', navigate: 'Navigacija', weather: 'Vreme', mud_risk: 'BLATO / RIZIK – kiša u poslednjih 48h', dry: 'Suvo – dobri uslovi',
+    rating: 'Ocena', comments: 'Komentari', history: 'Istorija izmena', route: 'Ruta', length: 'Dužina', duration: 'Procena trajanja', elevation: 'Visinski profil',
+    online_now: 'Trenutno online', activity: 'Aktivnost tima', all_vehicles: 'Sva vozila', per_month: 'Po mesecu', per_vehicle: 'Po vozilu',
+    specs: 'Specifikacije', verify_manual: 'Fabričke vrednosti – proveri u uputstvu za svoje godište.', registration: 'Registracija', insurance: 'Osiguranje',
+    expires: 'ističe', expired: 'ISTEKLO', days: 'dana', search_ph: 'Pretraži tačke, vozila, servise, delove...', nothing: 'Nema rezultata',
+    print_pdf: 'Export PDF', export_csv: 'Export CSV', theme: 'Tema', language: 'Jezik', units: 'Jedinice', dark: 'Tamna', light: 'Svetla',
+    backup: 'Rezervna kopija (JSON)', restore: 'Vrati iz kopije', reset: 'Obriši sve podatke', notifications: 'Browser notifikacije',
+    login: 'Prijava', logout: 'Odjava', guest: 'Gost', member: 'Član', admin: 'Admin', role: 'Uloga',
+    cond_mud: 'blato', cond_rock: 'kamen', cond_sand: 'pesak', cond_snow: 'sneg', cond_dry: 'suvo', cond_water: 'voda',
+  },
+  en: {
+    tagline: 'OFF-ROAD OPERATIONS CENTER', local_mode: 'Local mode', cloud_mode: 'Cloud', offline: 'Offline',
+    nav_dashboard: 'Dashboard', nav_map: 'Map', nav_fleet: 'Fleet', nav_service: 'Service log', nav_trips: 'Trips',
+    nav_fuel: 'Fuel', nav_parts: 'Spare parts', nav_costs: 'Costs', nav_checklist: 'Pre-ride checklist', nav_planner: 'Ride planner',
+    nav_sos: 'SOS card', nav_analytics: 'Analytics', nav_team: 'Team', nav_settings: 'Settings',
+    sec_ops: 'Operations', sec_fleet: 'Fleet & maintenance', sec_more: 'More',
+    poi_by_coords: 'Point (coords)', import_gpx: 'Import GPX/KML', draw_route: 'Draw route', measure: 'Measure', filters: 'Filters',
+    min_diff: 'Min. difficulty', author: 'Author', radius_from_me: 'Distance from me', points: 'Points',
+    save: 'Save', cancel: 'Cancel', delete: 'Delete', edit: 'Edit', add: 'Add', close: 'Close', confirm: 'Confirm', yes: 'Yes', no: 'No',
+    name: 'Name', category: 'Category', difficulty: 'Difficulty', description: 'Description', photos: 'Photos', date: 'Date', hours: 'Hours', km: 'Km',
+    vehicle: 'Vehicle', notes: 'Notes', cost: 'Cost', total: 'Total', urgent: 'URGENT', soon: 'SOON', ok: 'OK',
+    undo_done: 'Undone', saved: 'Saved', deleted: 'Deleted', confirm_delete: 'Are you sure you want to delete?', no_permission: 'You do not have permission.',
+    total_hours: 'Total engine hours', total_km: 'Total distance', since_service: 'Hours since service', next_service: 'Next service',
+    overdue_items: 'Overdue intervals', warnings: 'Warnings', add_trip: 'Log trip', add_service: 'Log service', add_fuel: 'Log fuel',
+    wear: 'wear', navigate: 'Navigate', weather: 'Weather', mud_risk: 'MUD / RISK – rain in last 48h', dry: 'Dry – good conditions',
+    rating: 'Rating', comments: 'Comments', history: 'Edit history', route: 'Route', length: 'Length', duration: 'Est. duration', elevation: 'Elevation profile',
+    online_now: 'Online now', activity: 'Team activity', all_vehicles: 'All vehicles', per_month: 'Per month', per_vehicle: 'Per vehicle',
+    specs: 'Specifications', verify_manual: 'Factory values – verify in the manual for your model year.', registration: 'Registration', insurance: 'Insurance',
+    expires: 'expires', expired: 'EXPIRED', days: 'days', search_ph: 'Search points, vehicles, services, parts...', nothing: 'No results',
+    print_pdf: 'Export PDF', export_csv: 'Export CSV', theme: 'Theme', language: 'Language', units: 'Units', dark: 'Dark', light: 'Light',
+    backup: 'Backup (JSON)', restore: 'Restore from backup', reset: 'Erase all data', notifications: 'Browser notifications',
+    login: 'Sign in', logout: 'Sign out', guest: 'Guest', member: 'Member', admin: 'Admin', role: 'Role',
+    cond_mud: 'mud', cond_rock: 'rock', cond_sand: 'sand', cond_snow: 'snow', cond_dry: 'dry', cond_water: 'water',
+  }
+};
+const t = k => (I18N[S?.settings?.lang || 'sr'][k] ?? I18N.sr[k] ?? k);
+function applyI18n() { $$('[data-i]').forEach(el => { el.textContent = t(el.dataset.i); }); document.documentElement.lang = S.settings.lang; }
+
+/* ------------------------------------------------------------------ */
+/*  CORE: SVG ikone (Lucide stil, inline)                              */
+/* ------------------------------------------------------------------ */
+const ICON = {
+  dashboard: '<rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/>',
+  map: '<path d="M9 18l-6 3V6l6-3 6 3 6-3v15l-6 3-6-3z"/><path d="M9 3v15M15 6v15"/>',
+  fleet: '<path d="M5 17h-2v-6l2-5h9l4 5h3v6h-2"/><circle cx="7.5" cy="17.5" r="2.5"/><circle cx="17.5" cy="17.5" r="2.5"/>',
+  service: '<path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L4 17l3 3 5.3-5.3a4 4 0 0 0 5.4-5.4l-2.4 2.4-1.6-1.6z"/>',
+  trips: '<path d="M4 19l5-14 4 8 3-4 4 10"/>',
+  fuel: '<path d="M3 22V5a2 2 0 0 1 2-2h7a2 2 0 0 1 2 2v17"/><path d="M3 10h11"/><path d="M14 8h2a2 2 0 0 1 2 2v7a1.5 1.5 0 0 0 3 0V9l-3-3"/>',
+  parts: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/>',
+  costs: '<path d="M12 2v20M17 6H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>',
+  checklist: '<path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>',
+  planner: '<rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/>',
+  sos: '<path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5M2 12l10 5 10-5"/>',
+  analytics: '<path d="M3 3v18h18"/><path d="M7 15l4-5 3 3 6-7"/>',
+  team: '<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.9M16 3.1a4 4 0 0 1 0 7.8"/>',
+  settings: '<path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6"/>',
+  plus: '<path d="M12 5v14M5 12h14"/>', x: '<path d="M18 6L6 18M6 6l12 12"/>', pin: '<path d="M12 21s-7-6-7-11a7 7 0 0 1 14 0c0 5-7 11-7 11z"/><circle cx="12" cy="10" r="2.5"/>',
+  nav: '<path d="M3 11l19-9-9 19-2-8z"/>', check: '<path d="M20 6L9 17l-5-5"/>', trash: '<path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"/>', edit: '<path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/>',
+  warn: '<path d="M10.3 3.9L1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4M12 17h.01"/>',
+  cloud: '<path d="M18 10h-1.3A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"/>', sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>',
+  rain: '<path d="M16 13v8M8 13v8M12 15v8M20 16.6A5 5 0 0 0 18 7h-1.3A8 8 0 1 0 4 15.3"/>', wind: '<path d="M9.6 4.6A2 2 0 1 1 11 8H2M12.6 19.4A2 2 0 1 0 14 16H2M17.7 7.7A2.5 2.5 0 1 1 19.5 12H2"/>',
+  camera: '<path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/>',
+  copy: '<rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>',
+  phone: '<path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1.9.4 1.8.7 2.6a2 2 0 0 1-.5 2.1L8.1 9.7a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.8.3 1.7.6 2.6.7a2 2 0 0 1 1.7 2z"/>',
+  gauge: '<path d="M12 15l3.5-3.5"/><path d="M20.3 18a9 9 0 1 0-16.6 0"/>', clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>', road: '<path d="M4 19L8 5M20 19L16 5M12 5v3M12 11v3M12 17v2"/>',
+  down: '<path d="M12 3v12M7 10l5 5 5-5"/><path d="M4 21h16"/>', up: '<path d="M12 21V9M7 14l5-5 5 5"/><path d="M4 3h16"/>', layers: '<path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5M2 12l10 5 10-5"/>',
+  star: '<path d="M12 2l3.1 6.3 6.9 1-5 4.9 1.2 6.8L12 17.8 5.8 21l1.2-6.8-5-4.9 6.9-1z"/>', chat: '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>',
+  mountain: '<path d="M8 3l4 8 5-5 5 15H2L8 3z"/>', water: '<path d="M2 12c2-2 4-2 6 0s4 2 6 0 4-2 6 0M2 17c2-2 4-2 6 0s4 2 6 0 4-2 6 0M2 7c2-2 4-2 6 0s4 2 6 0 4-2 6 0"/>',
+  tent: '<path d="M3 20l9-16 9 16H3z"/><path d="M12 20v-6"/>', flag: '<path d="M4 22V4a1 1 0 0 1 1-1h12l-2 4 2 4H5"/>', eye: '<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>',
+  moto: '<circle cx="5" cy="17" r="3"/><circle cx="19" cy="17" r="3"/><path d="M5 17h4l3-6h4l3 6M9 11l2-5h3"/>', buggy: '<path d="M3 17V9l3-4h8l4 4h3v8"/><circle cx="7" cy="17" r="2.5"/><circle cx="17" cy="17" r="2.5"/><path d="M9 17h6"/>',
+  login: '<path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><path d="M10 17l5-5-5-5M15 12H3"/>',
+};
+const ic = (n, cls = 'i') => `<svg class="${cls}" viewBox="0 0 24 24">${ICON[n] || ''}</svg>`;
+
+/* ------------------------------------------------------------------ */
+/*  CORE: STATE                                                        */
+/* ------------------------------------------------------------------ */
+const STORE_KEY = 'trailcommand-v1';
+let S = null;                 // glavni state
+let undoStack = [];           // snimci za undo (poslednjih 10)
+let cloud = { enabled: false, db: null, auth: null, user: null, unsub: [] };
+
+function emptyState() {
+  return {
+    settings: { lang: 'sr', theme: 'dark', units: 'km', tempUnit: 'C', notif: false, currentUser: null, firebase: null, view: 'dashboard', mapLayer: 'osm' },
+    users: [], vehicles: [], pois: [], routes: [], services: [], trips: [], fuel: [], parts: [], checklists: [], events: [], activity: [], contacts: [],
+  };
+}
+function persist() { try { localStorage.setItem(STORE_KEY, JSON.stringify(S)); } catch (e) { toast('Greška pri čuvanju (memorija puna?)', true); } }
+function load() {
+  try { const raw = localStorage.getItem(STORE_KEY); if (raw) { S = Object.assign(emptyState(), JSON.parse(raw)); return; } } catch (e) { }
+  S = emptyState(); seedDemo(); persist();
+}
+
+/* trenutni korisnik + uloge */
+const me = () => S.users.find(u => u.id === S.settings.currentUser) || { id: 'guest', name: t('guest'), role: 'guest' };
+const can = (action, ownerId) => { const u = me(); if (u.role === 'admin') return true; if (u.role === 'member') return action === 'add' || (action === 'edit' && (!ownerId || ownerId === u.id)) || (action === 'delete' && ownerId === u.id); return false; };
+function requirePerm(action, ownerId) { if (!can(action, ownerId)) { toast(t('no_permission'), true); return false; } return true; }
+
+/* centralna mutacija: undo + aktivnost + persist + cloud + rerender */
+function mutate(fn, activityText, opts = {}) {
+  undoStack.push(JSON.stringify(S)); if (undoStack.length > 10) undoStack.shift();
+  fn(S);
+  if (activityText) logActivity(activityText);
+  persist();
+  if (cloud.enabled && !opts.noCloud) cloudPush();
+  renderAll();
+  $('#undoBtn').style.opacity = 1;
+  if (activityText && !opts.silent) toast(activityText, false, true);
+}
+function undo() { if (!undoStack.length) { toast('—'); return; } S = JSON.parse(undoStack.pop()); persist(); if (cloud.enabled) cloudPush(); renderAll(); toast(t('undo_done')); if (!undoStack.length) $('#undoBtn').style.opacity = .4; }
+function logActivity(text) { S.activity.unshift({ id: uid(), user: me().name, text, date: new Date().toISOString() }); if (S.activity.length > 200) S.activity.length = 200; }
+
+/* ------------------------------------------------------------------ */
+/*  CORE: UI – modal, toast, navigacija, pretraga                      */
+/* ------------------------------------------------------------------ */
+function openModal(html, wide) { $('#sheet').innerHTML = html; $('#sheet').classList.toggle('wide', !!wide); $('#modal').classList.add('open'); const f = $('#sheet input,#sheet select,#sheet textarea'); if (f && window.innerWidth > 900) setTimeout(() => f.focus(), 50); }
+function closeModal() { $('#modal').classList.remove('open'); $('#sheet').innerHTML = ''; }
+let toastT;
+function toast(msg, err = false, withUndo = false) {
+  const el = $('#toast'); el.className = 'toast show' + (err ? ' err' : '');
+  el.innerHTML = esc(msg) + (withUndo ? ` <span class="undo" data-act="undo">UNDO</span>` : '');
+  clearTimeout(toastT); toastT = setTimeout(() => el.classList.remove('show'), withUndo ? 4500 : 2200);
+}
+function confirmBox(msg, onYes, danger = true) {
+  openModal(`<h2>${ic('warn')} ${esc(msg)}</h2><div class="actions"><button class="btn ghost" data-act="closeModal">${t('no')}</button><button class="btn ${danger ? 'danger' : 'primary'}" id="cfYes">${t('yes')}</button></div>`);
+  $('#cfYes').onclick = () => { closeModal(); onYes(); };
+}
+function modalHead(title, icon = 'edit') { return `<h2>${ic(icon)} ${esc(title)}<button class="ibtn x" data-act="closeModal">${ic('x')}</button></h2>`; }
+function formVal(id) { const el = $('#' + id); return el ? (el.type === 'checkbox' ? el.checked : el.value) : ''; }
+function num(id) { const v = parseFloat(formVal(id)); return isNaN(v) ? 0 : v; }
+function validate(ids) { let ok = true; ids.forEach(id => { const el = $('#' + id); if (!el) return; const bad = !String(el.value).trim(); el.classList.toggle('err', bad); if (bad) ok = false; }); if (!ok) toast('Popuni obavezna polja', true); return ok; }
+function readFileAsDataURL(file, maxW = 1200) {
+  return new Promise(res => {
+    const r = new FileReader();
+    r.onload = () => {
+      const img = new Image(); img.onload = () => { const s = Math.min(1, maxW / img.width); const c = document.createElement('canvas'); c.width = img.width * s; c.height = img.height * s; c.getContext('2d').drawImage(img, 0, 0, c.width, c.height); res(c.toDataURL('image/jpeg', .8)); };
+      img.onerror = () => res(r.result); img.src = r.result;
+    };
+    r.readAsDataURL(file);
+  });
+}
+function download(name, content, type = 'text/plain') { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([content], { type })); a.download = name; document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 500); }
+function csv(rows) { return rows.map(r => r.map(v => `"${String(v ?? '').replace(/"/g, '""')}"`).join(';')).join('\n'); }
+
+const NAV = [
+  { sec: 'sec_ops' }, { id: 'dashboard', ic: 'dashboard' }, { id: 'map', ic: 'map' }, { id: 'planner', ic: 'planner' }, { id: 'checklist', ic: 'checklist' }, { id: 'sos', ic: 'sos' },
+  { sec: 'sec_fleet' }, { id: 'fleet', ic: 'fleet' }, { id: 'service', ic: 'service' }, { id: 'trips', ic: 'trips' }, { id: 'fuel', ic: 'fuel' }, { id: 'parts', ic: 'parts' }, { id: 'costs', ic: 'costs' },
+  { sec: 'sec_more' }, { id: 'analytics', ic: 'analytics' }, { id: 'team', ic: 'team' }, { id: 'settings', ic: 'settings' },
+];
+const MOBILE_NAV = ['dashboard', 'map', 'fleet', 'service', 'trips', 'settings'];
+function renderNav() {
+  const alerts = fleetAlerts();
+  const badge = id => id === 'fleet' && alerts.bad ? `<span class="badge">${alerts.bad}</span>` : id === 'fleet' && alerts.warn ? `<span class="badge amber">${alerts.warn}</span>` : id === 'parts' && lowParts().length ? `<span class="badge amber">${lowParts().length}</span>` : '';
+  $('#sidebar').innerHTML = NAV.map(n => n.sec ? `<div class="sec">${t(n.sec)}</div>` : `<button class="navb ${S.settings.view === n.id ? 'active' : ''}" data-act="go" data-v="${n.id}">${ic(n.ic)}<span>${t('nav_' + n.id)}</span>${badge(n.id)}</button>`).join('');
+  $('#bottomnav').innerHTML = MOBILE_NAV.map(id => `<button class="${S.settings.view === id ? 'active' : ''}" data-act="go" data-v="${id}">${ic(NAV.find(n => n.id === id).ic)}<span>${t('nav_' + id)}</span>${badge(id)}</button>`).join('');
+}
+function go(view) {
+  S.settings.view = view; persist();
+  $$('.view').forEach(v => v.classList.toggle('active', v.id === 'v-' + view));
+  renderNav(); renderView(view);
+  $('#main').scrollTop = 0;
+  if (view === 'map') setTimeout(() => { initMap(); map && map.invalidateSize(); }, 30);
+}
+function renderAll() { renderNav(); applyI18n(); renderView(S.settings.view); renderTopbar(); }
+function renderView(v) {
+  const R = { dashboard: renderDashboard, map: renderMapSide, fleet: renderFleet, service: renderService, trips: renderTrips, fuel: renderFuel, parts: renderParts, costs: renderCosts, checklist: renderChecklist, planner: renderPlanner, sos: renderSOS, analytics: renderAnalytics, team: renderTeam, settings: renderSettings };
+  try { R[v] && R[v](); } catch (e) { console.error(e); $('#v-' + v).innerHTML = `<div class="card red">Greška u modulu: ${esc(e.message)}</div>`; }
+}
+function renderTopbar() {
+  const u = me(); $('#userName').textContent = u.name; $('#userRole').textContent = t(u.role); $('#userAv').textContent = u.name.slice(0, 1).toUpperCase();
+  const c = $('#conn'); c.className = 'conn ' + (!navigator.onLine ? 'off' : cloud.enabled ? 'cloud' : '');
+  c.querySelector('b').textContent = !navigator.onLine ? t('offline') : cloud.enabled ? t('cloud_mode') : t('local_mode');
+}
+function tickClock() { const d = new Date(); $('#clock').textContent = d.toLocaleTimeString('sr-Latn', { hour12: false }); $('#clockDate').textContent = d.toLocaleDateString(S.settings.lang === 'en' ? 'en-GB' : 'sr-Latn', { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric' }); }
+
+/* animirani brojači */
+function animateCounters(root = document) {
+  $$('[data-count]', root).forEach(el => {
+    const target = parseFloat(el.dataset.count); const dec = el.dataset.dec ? +el.dataset.dec : 0; const suffix = el.dataset.suffix || '';
+    const t0 = performance.now(), dur = 900;
+    const step = now => { const p = clamp((now - t0) / dur, 0, 1); const e = 1 - Math.pow(1 - p, 3); el.textContent = (target * e).toLocaleString('sr-Latn', { minimumFractionDigits: dec, maximumFractionDigits: dec }) + suffix; if (p < 1) requestAnimationFrame(step); };
+    requestAnimationFrame(step);
+  });
+}
+
+/* globalna pretraga */
+function openSearch() {
+  openModal(`${modalHead('Pretraga', 'dashboard')}<input id="gsearch" placeholder="${t('search_ph')}"><div class="search-res" id="gsres"></div><div style="margin-top:8px;font-size:11px;color:var(--dim)"><span class="kbd">Ctrl</span>+<span class="kbd">K</span> · <span class="kbd">Esc</span></div>`);
+  const inp = $('#gsearch'); inp.focus();
+  const run = () => {
+    const q = inp.value.trim().toLowerCase(); const res = [];
+    if (q.length < 1) { $('#gsres').innerHTML = ''; return; }
+    S.pois.filter(p => (p.name + ' ' + p.desc + ' ' + p.cat).toLowerCase().includes(q)).forEach(p => res.push({ ic: 'pin', t: p.name, s: CAT[p.cat]?.sr || p.cat, act: `focusPoi`, id: p.id }));
+    S.vehicles.filter(v => (v.name + ' ' + (v.vin || '') + ' ' + (v.reg || '')).toLowerCase().includes(q)).forEach(v => res.push({ ic: 'fleet', t: v.name, s: `${n1(v.hours)} h · ${n0(v.km)} km`, act: 'goFleet', id: v.id }));
+    S.vehicles.forEach(v => v.services.filter(s => s.name.toLowerCase().includes(q)).forEach(s => res.push({ ic: 'service', t: s.name, s: v.name, act: 'goFleet', id: v.id })));
+    S.services.filter(s => (s.desc + ' ' + s.parts + ' ' + s.who).toLowerCase().includes(q)).forEach(s => res.push({ ic: 'service', t: fmtD(s.date) + ' – ' + s.desc, s: vname(s.vehicleId), act: 'goView', id: 'service' }));
+    S.parts.filter(p => (p.name + ' ' + p.partNo).toLowerCase().includes(q)).forEach(p => res.push({ ic: 'parts', t: p.name, s: p.partNo + ' · ' + p.qty + ' kom', act: 'goView', id: 'parts' }));
+    S.events.filter(e => e.title.toLowerCase().includes(q)).forEach(e => res.push({ ic: 'planner', t: e.title, s: fmtD(e.date), act: 'goView', id: 'planner' }));
+    $('#gsres').innerHTML = res.length ? res.slice(0, 30).map(r => `<div class="li" style="cursor:pointer" data-act="${r.act}" data-id="${r.id}">${ic(r.ic)}<div class="t"><b>${esc(r.t)}</b><small>${esc(r.s)}</small></div></div>`).join('') : `<div class="empty">${t('nothing')}</div>`;
+  };
+  inp.oninput = run;
+}
+const vname = id => S.vehicles.find(v => v.id === id)?.name || '—';
+const pname = id => S.pois.find(p => p.id === id)?.name || '—';
+</script>
+<script>
+/* ------------------------------------------------------------------ */
+/*  SEED: kategorije tačaka                                            */
+/* ------------------------------------------------------------------ */
+const CAT = {
+  enduro: { sr: 'Enduro staza', en: 'Enduro trail', color: '#ff7a1a', ic: 'moto' },
+  utv: { sr: 'UTV / buggy staza', en: 'UTV / buggy trail', color: '#5aa9ff', ic: 'buggy' },
+  river: { sr: 'Reka / gaz', en: 'River crossing', color: '#00e5ff', ic: 'water' },
+  climb: { sr: 'Uspon', en: 'Hill climb', color: '#b388ff', ic: 'mountain' },
+  camp: { sr: 'Kamp', en: 'Camp', color: '#2ee6a6', ic: 'tent' },
+  gas: { sr: 'Benzinska pumpa', en: 'Gas station', color: '#ffd23f', ic: 'fuel' },
+  service: { sr: 'Servis', en: 'Service shop', color: '#9aa5b1', ic: 'service' },
+  danger: { sr: 'Opasnost', en: 'Danger', color: '#ff4d5e', ic: 'warn' },
+  view: { sr: 'Vidikovac', en: 'Viewpoint', color: '#ffb020', ic: 'eye' },
+  startfinish: { sr: 'Start / cilj', en: 'Start / finish', color: '#ffffff', ic: 'flag' },
+};
+const catName = c => CAT[c] ? (S.settings.lang === 'en' ? CAT[c].en : CAT[c].sr) : c;
+const DIFF_COLOR = ['', '#2ee6a6', '#9be15d', '#ffd23f', '#ffb020', '#ff4d5e'];
+const CONDS = ['mud', 'rock', 'sand', 'snow', 'dry', 'water'];
+
+/* ------------------------------------------------------------------ */
+/*  SEED: servisni intervali (fabrički – korisnik da proveri)          */
+/*  intH = interval u radnim satima, intKm = u km, intM = u mesecima   */
+/* ------------------------------------------------------------------ */
+const SVC = (name, intH, intKm, intM, kind = 'replace', note = '') => ({ id: uid(), name, intH: intH || null, intKm: intKm || null, intM: intM || null, kind, note, lastH: 0, lastKm: 0, lastDate: today() });
+
+function shercoServices() {
+  return [
+    SVC('Motorno ulje – zamena', 15, null, 12, 'replace', 'SAE 10W-50 (full synthetic) · ~1,1 L sa filterom'),
+    SVC('Filter ulja – zamena', 30, null, 12, 'replace', 'Zajedno sa svakom drugom zamenom ulja'),
+    SVC('Vazdušni filter – čišćenje / zamena', 5, null, null, 'inspect', 'Čišćenje posle svake prašnjave/blatnjave vožnje, zamena na ~50 h'),
+    SVC('Zazor ventila – kontrola i podešavanje', 45, null, null, 'inspect', 'Usis 0,10–0,15 mm · Izduv 0,20–0,25 mm (proveriti)'),
+    SVC('Svećica – zamena', 45, null, null, 'replace', 'NGK LMAR9AI-10 ili ekvivalent (proveriti za godište)'),
+    SVC('Kvačilo – lamele (kontrola / zamena)', 90, null, null, 'inspect', 'Kontrola debljine lamela i opruga'),
+    SVC('Lanac i lančanici – zatezanje i podmazivanje', 5, null, null, 'inspect', 'Luft 50–60 mm, podmazati posle pranja'),
+    SVC('Lanac i lančanici – zamena', 90, null, null, 'replace', '520 lanac · prednji 13/14z · zadnji 48–50z'),
+    SVC('Kočione pločice – kontrola', 15, null, null, 'inspect', 'Min. debljina 1 mm'),
+    SVC('Kočiona tečnost – zamena', 100, null, 12, 'replace', 'DOT 4'),
+    SVC('Rashladna tečnost – zamena', 100, null, 24, 'replace', '~1,2 L · provera nivoa pre svake vožnje'),
+    SVC('Viljuška – ulje i semeringi', 60, null, 12, 'replace', 'KYB/WP – ulje po uputstvu, proveriti nivo'),
+    SVC('Zadnji amortizer – servis', 90, null, 24, 'replace', 'Ulje + azot, specijalizovani servis'),
+    SVC('Ležajevi točkova i uležištenja (progresija, viljuška)', 90, null, 12, 'inspect', 'Kontrola luftova, podmazivanje'),
+    SVC('Klip i karike – zamena', 90, null, null, 'replace', 'Sherco preporuka za 450 4T: kontrola 90 h (proveriti u uputstvu)'),
+    SVC('Gume – stanje i pritisak', 5, null, null, 'inspect', '0,8–1,0 bar off-road · 1,2–1,5 bar asfalt'),
+  ];
+}
+function polarisServices() {
+  return [
+    SVC('Motorno ulje i filter – zamena', 100, 1600, 6, 'replace', 'PS-4 5W-50 full synthetic · ~2,4 L sa filterom · prvi servis 25 h'),
+    SVC('Vazdušni filter – kontrola / zamena', 25, 400, null, 'inspect', 'Češće u prašini i pesku'),
+    SVC('Filter goriva – zamena', 100, 1600, 12, 'replace', ''),
+    SVC('Prednji diferencijal (gearcase) – ulje', 100, 1600, 12, 'replace', 'Demand Drive Fluid · ~0,26 L'),
+    SVC('Zadnji diferencijal / menjač – ulje', 100, 1600, 12, 'replace', 'AGL Gearcase Lubricant · ~0,95 L'),
+    SVC('CVT kaiš – pregled', 25, 400, null, 'inspect', 'Pukotine, sjaj, širina'),
+    SVC('CVT kaiš – zamena', 100, 1600, null, 'replace', 'Polaris 3211180 (proveriti kataloški broj)'),
+    SVC('CVT kvačila – čišćenje', 50, 800, null, 'inspect', 'Komprimovani vazduh, kontrola valjaka i vođica'),
+    SVC('Rashladna tečnost – zamena', 200, 3200, 24, 'replace', 'Polaris 50/50 premešana'),
+    SVC('Kočione pločice – kontrola', 25, 400, null, 'inspect', 'Min. 1 mm obloge'),
+    SVC('Kočiona tečnost – zamena', 200, 3200, 24, 'replace', 'DOT 4'),
+    SVC('Kardanski zglobovi / CV manžetne – pregled', 25, 400, null, 'inspect', 'Pukotine, curenje masti'),
+    SVC('Ležajevi točkova – kontrola', 50, 800, null, 'inspect', ''),
+    SVC('Amortizeri – kontrola', 50, 800, null, 'inspect', 'Curenje, podešavanje'),
+    SVC('Šine (tie rods) i kugle (ball joints) – kontrola', 50, 800, null, 'inspect', 'Luft, pucanje manžetni'),
+    SVC('Gume – pritisak i stanje', 10, 200, null, 'inspect', '0,9–1,0 bar (14 psi) napred i nazad'),
+    SVC('Akumulator – kontrola', 50, 800, 6, 'inspect', 'Klemne, napon 12,6 V+'),
+    SVC('Svećice – zamena', 100, 1600, 12, 'replace', 'NGK MR7F (proveriti)'),
+  ];
+}
+const shercoSpecs = () => [
+  ['Motor', '1-cil., 4T, DOHC, 4 ventila, tečno hlađen'], ['Zapremina', '449,4 cm³'], ['Prečnik × hod', '95 × 63,4 mm'],
+  ['Ubrizgavanje', 'Synerject EFI, 42 mm'], ['Rezervoar', '9,7 L'], ['Masa (suva)', '≈ 107 kg'], ['Motorno ulje', '10W-50 · ≈ 1,1 L'],
+  ['Rashladna tečnost', '≈ 1,2 L'], ['Pritisak guma off-road', 'napred 0,9 bar · nazad 0,9 bar'], ['Moment – osovina zadnjeg točka', '100 Nm'],
+  ['Moment – osovina prednjeg točka', '45 Nm'], ['Moment – čep za ulje', '20 Nm'], ['Moment – svećica', '12 Nm'], ['Moment – zadnji lančanik', '35 Nm'],
+];
+const polarisSpecs = () => [
+  ['Motor', 'ProStar 1000, 2-cil., 4T, DOHC'], ['Zapremina', '999 cm³'], ['Snaga', '110 KS'], ['Prenos', 'CVT (PVT) · H/L/N/R/P'],
+  ['Rezervoar', '36 L (9,5 gal)'], ['Masa (suva)', '≈ 650 kg'], ['Motorno ulje', 'PS-4 5W-50 · ≈ 2,4 L'], ['Prednji gearcase', 'Demand Drive · 0,26 L'],
+  ['Menjač', 'AGL · 0,95 L'], ['Rashladna tečnost', '≈ 3,8 L'], ['Pritisak guma', '0,97 bar (14 psi) napred i nazad'], ['Moment – matice točkova', '163 Nm (120 ft-lb)'],
+  ['Moment – čep za ulje', '19 Nm (14 ft-lb)'], ['Moment – svećica', '12 Nm'], ['Hod vešanja', 'napred 406 mm · nazad 457 mm'],
+];
+
+/* ------------------------------------------------------------------ */
+/*  SEED: demo podaci                                                  */
+/* ------------------------------------------------------------------ */
+function seedDemo() {
+  const admin = { id: 'u-admin', name: 'Darijo', role: 'admin', email: '' };
+  const u2 = { id: 'u-marko', name: 'Marko', role: 'member', email: '' };
+  const u3 = { id: 'u-nikola', name: 'Nikola', role: 'member', email: '' };
+  S.users = [admin, u2, u3]; S.settings.currentUser = admin.id;
+
+  const sherco = { id: 'v-sherco', name: 'Sherco SEF 450', type: 'enduro', brand: 'Sherco', model: 'SEF 450 Factory', year: 2023, hours: 62.5, km: 1840, vin: 'VLBSEF450XXXXXXXX', reg: 'BG-XXXX-EN', regExpiry: '2027-03-15', insExpiry: '2027-03-15', services: shercoServices(), specs: shercoSpecs(), notes: '' };
+  const rzr = { id: 'v-rzr', name: 'Polaris RZR XP 1000', type: 'utv', brand: 'Polaris', model: 'RZR XP 1000 EPS', year: 2021, hours: 148, km: 2380, vin: '3NSVDE999XXXXXXXX', reg: 'BG-XXXX-UT', regExpiry: '2026-11-28', insExpiry: '2026-12-05', services: polarisServices(), specs: polarisSpecs(), notes: '' };
+  /* postavi "poslednji put" za stavke tako da aplikacija izgleda živo */
+  const setLast = (v, name, h, km, d) => { const s = v.services.find(x => x.name.startsWith(name)); if (s) { s.lastH = h; s.lastKm = km; s.lastDate = d; } };
+  const allLast = (v, h, km, d) => v.services.forEach(s => { s.lastH = h; s.lastKm = km; s.lastDate = d; });
+  allLast(sherco, 44, 1300, '2026-07-05'); setLast(sherco, 'Motorno ulje', 48, 1420, '2026-08-30'); setLast(sherco, 'Filter ulja', 48, 1420, '2026-08-30'); setLast(sherco, 'Vazdušni', 58, 1700, '2026-10-12');
+  setLast(sherco, 'Zazor', 44, 1300, '2026-07-05'); setLast(sherco, 'Svećica', 44, 1300, '2026-07-05'); setLast(sherco, 'Lanac i lančanici – zatez', 58, 1700, '2026-10-12');
+  setLast(sherco, 'Kočione pločice', 48, 1420, '2026-08-30'); setLast(sherco, 'Viljuška', 30, 900, '2025-12-14'); setLast(sherco, 'Gume', 58, 1700, '2026-10-12'); setLast(sherco, 'Kočiona tečnost', 30, 900, '2025-12-14'); setLast(sherco, 'Rashladna', 30, 900, '2025-09-14');
+  allLast(rzr, 100, 1600, '2026-03-14'); setLast(rzr, 'Motorno ulje', 100, 1600, '2026-06-20'); setLast(rzr, 'Vazdušni', 130, 2080, '2026-08-21'); setLast(rzr, 'CVT kaiš – pregled', 130, 2080, '2026-08-21');
+  setLast(rzr, 'CVT kaiš – zamena', 75, 1200, '2025-05-10'); setLast(rzr, 'CVT kvačila', 100, 1600, '2025-11-02'); setLast(rzr, 'Kočione pločice', 130, 2080, '2026-08-21'); setLast(rzr, 'Prednji dif', 100, 1600, '2026-03-14');
+  setLast(rzr, 'Zadnji dif', 100, 1600, '2026-03-14'); setLast(rzr, 'Filter goriva', 100, 1600, '2026-03-14'); setLast(rzr, 'Gume', 140, 2250, '2026-10-05'); setLast(rzr, 'Kardanski', 130, 2080, '2026-08-21'); setLast(rzr, 'Akumulator', 130, 2080, '2026-08-21'); setLast(rzr, 'Svećice', 100, 1600, '2026-03-14');
+  setLast(rzr, 'Rashladna', 0, 0, '2024-10-20'); setLast(rzr, 'Kočiona tečnost', 50, 800, '2024-10-20'); setLast(rzr, 'Amortizeri', 130, 2080, '2026-08-21'); setLast(rzr, 'Šine', 130, 2080, '2026-08-21'); setLast(rzr, 'Ležajevi', 130, 2080, '2026-08-21');
+  S.vehicles = [sherco, rzr];
+
+  const P = (name, cat, diff, lat, lng, desc, author = 'Darijo', extra = {}) => ({ id: uid(), name, cat, diff, lat, lng, desc, photos: [], author, date: '2026-0' + (1 + Math.floor(Math.random() * 9)) + '-1' + Math.floor(Math.random() * 9), ratings: [{ user: 'Marko', v: 4 }, { user: 'Nikola', v: 5 }], comments: [], history: [{ user: author, date: '2026-05-01', action: 'kreirano' }], ...extra });
+  S.pois = [
+    P('Tara – Mitrovac šumski putevi', 'enduro', 3, 43.9253, 19.4312, 'Mreža šumskih puteva oko Mitrovca, meki teren, dosta korenja. Obavezna dozvola NP Tara za motorna vozila van javnih puteva.', 'Darijo', { comments: [{ user: 'Marko', text: 'Posle kiše jako klizavo, prednja guma 0,8 bar.', date: '2026-06-02' }] }),
+    P('Zlatibor – Tornik ridge', 'utv', 2, 43.6690, 19.6672, 'Široki makadam od Tornika prema Čajetini, lepo za UTV i početnike. Vidikovac na vrhu.', 'Marko'),
+    P('Stara planina – Babin zub', 'enduro', 5, 43.3740, 22.6185, 'Strme kamenite staze iznad Babinog zuba. Samo za iskusne, oštar kamen – pazi na gume.', 'Nikola', { ratings: [{ user: 'Darijo', v: 5 }] }),
+    P('Rtanj – prilaz Šiljku', 'climb', 5, 43.7763, 21.8933, 'Uspon ka vrhu Šiljak (1565 m). Zadnji deo nije za vozila, ostaviti ispod. Ekstremno strmo i kamenito.', 'Darijo'),
+    P('Deliblatska peščara', 'utv', 2, 44.8830, 21.0570, 'Peščane staze, idealno za UTV. Leti veoma vruće, voziti ujutru. Delovi su rezervat – poštuj oznake.', 'Marko'),
+    P('Fruška gora – Iriški venac', 'enduro', 2, 45.1571, 19.8211, 'Blage šumske staze, blato posle kiše. Blizu Novog Sada, dobro za trening.', 'Nikola'),
+    P('Kopaonik – Pančićev vrh', 'view', 3, 43.2860, 20.8085, 'Vidikovac i start za ture ka Jošaničkoj Banji. Zimi sneg do maja.', 'Darijo'),
+    P('Besna kobila', 'enduro', 4, 42.5315, 22.2360, 'Visoravni i pašnjaci oko Besne kobile, dugačke trase, malo ljudi. Gorivo u Vranju!', 'Darijo'),
+    P('Golija – Jankov kamen', 'utv', 3, 43.3513, 20.2830, 'Dugi šumski putevi kroz NP Golija. Biosferni rezervat – voziti samo po putevima.', 'Marko'),
+    P('Vlasina – obilazak jezera', 'utv', 1, 42.7222, 22.3430, 'Lagana tura oko Vlasinskog jezera. Kamp na obali, pumpa u Surdulici.', 'Nikola'),
+    P('Divčibare – Crni vrh', 'enduro', 3, 44.1130, 19.9940, 'Mešavina makadama i single-track staza. Zimi dobar sneg za vožnju.', 'Darijo'),
+    P('Uvac – vidikovac Molitva', 'view', 2, 43.3350, 19.9330, 'Poznati meandri Uvca. Prilaz makadamom, parking na vrhu.', 'Marko'),
+    P('Đerdap – Miroč visoravan', 'enduro', 3, 44.5200, 22.3000, 'Plato iznad Dunava, bukove šume, pećine. Dug prilaz, ponesi rezervno gorivo.', 'Nikola'),
+    P('Gaz – Beli Rzav (Tara)', 'river', 3, 43.9550, 19.5230, 'Gaz preko Belog Rzava, dubina do 50 cm pri normalnom vodostaju. Posle kiše ne prelaziti!', 'Darijo'),
+    P('Opasnost – klizište Golija', 'danger', 4, 43.3380, 20.3100, 'Odron na šumskom putu, pola puta nedostaje. Obilazak levo kroz šumu.', 'Marko'),
+    P('Kamp Mitrovac', 'camp', 1, 43.9330, 19.4400, 'Kamp sa vodom i strujom, baza za Taru.', 'Darijo'),
+    P('Pumpa NIS Bajina Bašta', 'gas', 1, 43.9700, 19.5660, 'Poslednja pumpa pre Tare. Radi 0–24.', 'Darijo'),
+    P('Servis MotoKing Beograd', 'service', 1, 44.7866, 20.4489, 'Ovlašćeni Sherco servis, delovi na lageru.', 'Darijo'),
+    P('Start – Zlatibor tura', 'startfinish', 1, 43.7290, 19.7020, 'Okupljanje na parkingu kod jezera.', 'Marko'),
+  ];
+  S.routes = [{ id: 'r-tara', name: 'Tara loop (demo)', author: 'Darijo', date: '2026-06-01', points: [[43.9253, 19.4312], [43.9400, 19.4500], [43.9550, 19.5230], [43.9600, 19.4800], [43.9330, 19.4400], [43.9253, 19.4312]], ele: null }];
+
+  S.services = [
+    { id: uid(), vehicleId: 'v-sherco', date: '2026-08-30', hours: 48, km: 1420, items: ['Motorno ulje – zamena', 'Filter ulja – zamena', 'Kočione pločice – kontrola'], desc: 'Redovna zamena ulja i filtera, provera pločica', parts: 'Motul 300V 10W-50 1,2 L · filter HF 652', cost: 6800, who: 'Darijo', photo: '' },
+    { id: uid(), vehicleId: 'v-sherco', date: '2026-07-05', hours: 44, km: 1300, items: ['Zazor ventila – kontrola i podešavanje', 'Svećica – zamena'], desc: 'Ventili bili na granici – podešeni. Nova svećica.', parts: 'NGK LMAR9AI-10 · šim set', cost: 9500, who: 'MotoKing Beograd', photo: '' },
+    { id: uid(), vehicleId: 'v-sherco', date: '2025-12-14', hours: 30, km: 900, items: ['Viljuška – ulje i semeringi', 'Kočiona tečnost – zamena'], desc: 'Servis viljuške, novi semeringi, DOT4', parts: 'KYB semeringi · ulje 5W', cost: 12000, who: 'MotoKing Beograd', photo: '' },
+    { id: uid(), vehicleId: 'v-rzr', date: '2026-03-14', hours: 100, km: 1600, items: ['Motorno ulje i filter – zamena', 'Prednji diferencijal (gearcase) – ulje', 'Zadnji diferencijal / menjač – ulje', 'CVT kvačila – čišćenje'], desc: 'Veliki servis na 100 h', parts: 'PS-4 2,5 L · filter 2540086 · Demand Drive · AGL', cost: 24500, who: 'Darijo + Marko', photo: '' },
+    { id: uid(), vehicleId: 'v-rzr', date: '2025-05-10', hours: 75, km: 1200, items: ['CVT kaiš – zamena'], desc: 'Kaiš pukao na Deliblatskoj peščari, zamenjen na terenu', parts: 'Polaris 3211180', cost: 18900, who: 'Marko', photo: '' },
+    { id: uid(), vehicleId: 'v-rzr', date: '2026-08-21', hours: 130, km: 2080, items: ['Vazdušni filter – kontrola / zamena', 'CVT kaiš – pregled', 'Kočione pločice – kontrola', 'Kardanski zglobovi / CV manžetne – pregled'], desc: 'Pregled pre sezone', parts: 'Filter vazduha K&N', cost: 5200, who: 'Darijo', photo: '' },
+  ];
+  const pid = n => S.pois.find(p => p.name.startsWith(n)).id;
+  S.trips = [
+    { id: uid(), vehicleId: 'v-sherco', date: '2026-10-12', poiId: pid('Tara'), hours: 4.5, km: 110, conditions: ['mud', 'rock'], notes: 'Dosta blata posle kiše, super dan', fuelL: 7 },
+    { id: uid(), vehicleId: 'v-sherco', date: '2026-09-20', poiId: pid('Divčibare'), hours: 3, km: 70, conditions: ['dry'], notes: '', fuelL: 5 },
+    { id: uid(), vehicleId: 'v-sherco', date: '2026-09-06', poiId: pid('Stara planina'), hours: 5, km: 95, conditions: ['rock'], notes: 'Probušena zadnja guma', fuelL: 8 },
+    { id: uid(), vehicleId: 'v-sherco', date: '2026-08-15', poiId: pid('Fruška'), hours: 2, km: 45, conditions: ['dry'], notes: 'Trening', fuelL: 3.5 },
+    { id: uid(), vehicleId: 'v-rzr', date: '2026-10-05', poiId: pid('Deliblatska'), hours: 6, km: 180, conditions: ['sand'], notes: 'Pesak, 3 vozila', fuelL: 32 },
+    { id: uid(), vehicleId: 'v-rzr', date: '2026-09-13', poiId: pid('Golija'), hours: 7, km: 210, conditions: ['rock', 'mud'], notes: 'Klizište na putu – obeleženo', fuelL: 38 },
+    { id: uid(), vehicleId: 'v-rzr', date: '2026-08-02', poiId: pid('Vlasina'), hours: 4, km: 120, conditions: ['dry'], notes: 'Kamp 2 noći', fuelL: 20 },
+    { id: uid(), vehicleId: 'v-rzr', date: '2026-07-19', poiId: pid('Zlatibor'), hours: 5, km: 160, conditions: ['dry'], notes: '', fuelL: 27 },
+  ];
+  S.fuel = [
+    { id: uid(), vehicleId: 'v-sherco', date: '2026-10-12', liters: 9.5, cost: 1900, km: 1840, hours: 62.5, full: true },
+    { id: uid(), vehicleId: 'v-sherco', date: '2026-09-20', liters: 8.2, cost: 1640, km: 1730, hours: 58, full: true },
+    { id: uid(), vehicleId: 'v-sherco', date: '2026-09-06', liters: 9.0, cost: 1800, km: 1660, hours: 55, full: true },
+    { id: uid(), vehicleId: 'v-rzr', date: '2026-10-05', liters: 34, cost: 6800, km: 2380, hours: 148, full: true },
+    { id: uid(), vehicleId: 'v-rzr', date: '2026-09-13', liters: 36, cost: 7200, km: 2200, hours: 142, full: true },
+    { id: uid(), vehicleId: 'v-rzr', date: '2026-08-02', liters: 30, cost: 6000, km: 2060, hours: 135, full: true },
+  ];
+  S.parts = [
+    { id: uid(), vehicleId: 'v-sherco', name: 'Filter ulja', partNo: 'HF652', qty: 2, min: 2, price: 900 },
+    { id: uid(), vehicleId: 'v-sherco', name: 'Vazdušni filter', partNo: 'Twin Air 158XXX', qty: 1, min: 2, price: 2800 },
+    { id: uid(), vehicleId: 'v-sherco', name: 'Motorno ulje 10W-50', partNo: 'Motul 300V 1L', qty: 3, min: 2, price: 2300 },
+    { id: uid(), vehicleId: 'v-sherco', name: 'Svećica', partNo: 'NGK LMAR9AI-10', qty: 0, min: 1, price: 2100 },
+    { id: uid(), vehicleId: 'v-rzr', name: 'CVT kaiš', partNo: '3211180', qty: 1, min: 1, price: 18900 },
+    { id: uid(), vehicleId: 'v-rzr', name: 'Filter ulja', partNo: '2540086', qty: 1, min: 2, price: 1500 },
+    { id: uid(), vehicleId: 'v-rzr', name: 'Ulje PS-4 5W-50', partNo: '2876244 (1 qt)', qty: 2, min: 3, price: 1900 },
+    { id: uid(), vehicleId: 'v-rzr', name: 'Vazdušni filter', partNo: '7082115', qty: 0, min: 1, price: 4200 },
+  ];
+  S.events = [
+    { id: uid(), title: 'Jesenja tura – Tara', date: '2026-11-15', routeId: 'r-tara', poiId: pid('Tara'), participants: ['Darijo', 'Marko'], gear: [{ t: 'Rezervno gorivo 10 L', ok: true }, { t: 'Vitlo / sajla', ok: false }, { t: 'Prva pomoć', ok: true }, { t: 'Radio stanice', ok: false }], notes: 'Polazak 6:00 sa Zlatibora', author: 'Darijo' },
+    { id: uid(), title: 'Zimska vožnja Kopaonik', date: '2026-12-20', routeId: '', poiId: pid('Kopaonik'), participants: ['Nikola'], gear: [{ t: 'Lanci', ok: false }, { t: 'Zimske rukavice', ok: false }], notes: '', author: 'Nikola' },
+  ];
+  S.contacts = [{ name: 'Hitna pomoć', phone: '194' }, { name: 'Policija', phone: '192' }, { name: 'Gorska služba spasavanja', phone: '+381 64 11 2000'}, { name: 'Marko (vozač pratnje)', phone: '+381 6x xxx xxxx' }];
+  S.checklists = [];
+  S.activity = [
+    { id: uid(), user: 'Marko', text: 'dodao tačku „Opasnost – klizište Golija"', date: '2026-10-28T17:20:00' },
+    { id: uid(), user: 'Nikola', text: 'ocenio „Stara planina – Babin zub" sa 5★', date: '2026-10-26T09:10:00' },
+    { id: uid(), user: 'Darijo', text: 'upisao vožnju Sherco SEF 450 – Tara 4,5 h', date: '2026-10-12T19:05:00' },
+  ];
+}
+</script>
+<script>
+/* ================================================================== */
+/*  MAP MODUL – Leaflet, slojevi, POI, filteri, rute, GPX/KML,        */
+/*  visinski profil, vreme (Open-Meteo), heatmap, merenje             */
+/* ================================================================== */
+let map = null, baseLayers = {}, poiLayer = null, routeLayer = null, heatLayer = null, measureLayer = null, drawLayer = null;
+let myPos = null, myMarker = null, mode = null /* null | draw | measure */, drawPts = [], measurePts = [], activeRouteId = null;
+const SPEED = { enduro: 14, utv: 20, default: 16 }; // prosečna off-road brzina km/h za procenu trajanja
+
+function initMap() {
+  if (map || typeof L === 'undefined') { if (!map && $('#map')) $('#map').innerHTML = '<div class="empty">Leaflet nije učitan – potreban je internet pri prvom otvaranju.</div>'; return; }
+  map = L.map('map', { zoomControl: true, attributionControl: true }).setView([43.9, 20.9], 7);
+  baseLayers = {
+    osm: L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OpenStreetMap' }),
+    sat: L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { maxZoom: 19, attribution: '© Esri World Imagery' }),
+    topo: L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', { maxZoom: 17, attribution: '© OpenTopoMap (CC-BY-SA)' }),
+  };
+  setLayer(S.settings.mapLayer || 'osm');
+  poiLayer = L.layerGroup().addTo(map); routeLayer = L.layerGroup().addTo(map); measureLayer = L.layerGroup().addTo(map); drawLayer = L.layerGroup().addTo(map);
+  map.on('click', e => {
+    if (mode === 'draw') { drawPts.push([e.latlng.lat, e.latlng.lng]); redrawDraft(); }
+    else if (mode === 'measure') { measurePts.push([e.latlng.lat, e.latlng.lng]); redrawMeasure(); }
+    else openPoiForm(null, e.latlng);
+  });
+  map.on('dblclick', e => { if (mode === 'draw') { L.DomEvent.stop(e); finishDraw(); } });
+  try { const v = JSON.parse(localStorage.getItem(STORE_KEY + '-mapview')); if (v) map.setView([v.lat, v.lng], v.z); } catch (e) { }
+  map.on('moveend', () => { try { const c = map.getCenter(); localStorage.setItem(STORE_KEY + '-mapview', JSON.stringify({ lat: c.lat, lng: c.lng, z: map.getZoom() })); } catch (e) { } });
+  $('#gpxFile').onchange = e => importTrackFile(e.target.files[0]);
+  ['fText', 'fDiff', 'fAuthor'].forEach(id => $('#' + id).oninput = renderMapSide);
+  $('#fRad').oninput = () => { $('#fRadV').textContent = +$('#fRad').value || '∞'; renderMapSide(); };
+  renderMapSide();
+}
+function setLayer(k) { if (!map) return; Object.values(baseLayers).forEach(l => map.removeLayer(l)); baseLayers[k].addTo(map); S.settings.mapLayer = k; persist(); $$('.maptb [data-act=layer]').forEach(b => b.classList.toggle('on', b.dataset.v === k)); }
+
+/* ---------- markeri ---------- */
+function poiIcon(p) {
+  const c = CAT[p.cat] || CAT.enduro; const border = DIFF_COLOR[p.diff] || '#fff';
+  return L.divIcon({ className: '', iconSize: [30, 30], iconAnchor: [15, 30], popupAnchor: [0, -28], html: `<div class="pin"><div class="b" style="background:${c.color};border-color:${border}"></div>${ic(c.ic, '')}</div>` });
+}
+function filteredPois() {
+  const q = ($('#fText')?.value || '').toLowerCase(); const cats = $$('#fCats .chip.on').map(c => c.dataset.v); const diff = +($('#fDiff')?.value || 0); const author = $('#fAuthor')?.value || ''; const rad = +($('#fRad')?.value || 0);
+  return S.pois.filter(p => (!q || (p.name + ' ' + p.desc).toLowerCase().includes(q)) && (!cats.length || cats.includes(p.cat)) && p.diff >= diff && (!author || p.author === author) && (!rad || !myPos || haversine(myPos, [p.lat, p.lng]) <= rad));
+}
+function renderMapSide() {
+  const fc = $('#fCats'); if (fc && !fc.children.length) fc.innerHTML = Object.keys(CAT).map(k => `<button class="chip" data-v="${k}" style="border-color:${CAT[k].color}55">${catName(k)}</button>`).join('');
+  const fa = $('#fAuthor'); if (fa) { const cur = fa.value; const authors = [...new Set(S.pois.map(p => p.author))]; fa.innerHTML = '<option value="">—</option>' + authors.map(a => `<option ${a === cur ? 'selected' : ''}>${esc(a)}</option>`).join(''); }
+  const list = filteredPois(); $('#poiCount').textContent = list.length + '/' + S.pois.length;
+  if (poiLayer) { poiLayer.clearLayers(); list.forEach(p => L.marker([p.lat, p.lng], { icon: poiIcon(p) }).bindPopup(() => poiPopup(p), { maxWidth: 280 }).addTo(poiLayer)); }
+  const sorted = list.slice().sort((a, b) => myPos ? haversine(myPos, [a.lat, a.lng]) - haversine(myPos, [b.lat, b.lng]) : avgRating(b) - avgRating(a));
+  $('#poiList').innerHTML = sorted.length ? sorted.map(p => `<div class="li" style="cursor:pointer" data-act="focusPoi" data-id="${p.id}">
+      <span class="pin" style="width:22px;height:22px;transform:scale(.75)"><span class="b" style="background:${CAT[p.cat]?.color};border-color:${DIFF_COLOR[p.diff]}"></span></span>
+      <div class="t"><b>${esc(p.name)}</b><small>${catName(p.cat)} · ${diffBar(p.diff)} · ★ ${avgRating(p).toFixed(1)}${myPos ? ' · ' + U.dist(haversine(myPos, [p.lat, p.lng])) : ''}</small></div></div>`).join('') : `<div class="empty">${t('nothing')}</div>`;
+  renderRouteCard();
+  if (heatLayer) buildHeat();
+}
+const avgRating = p => p.ratings?.length ? p.ratings.reduce((a, r) => a + r.v, 0) / p.ratings.length : 0;
+const diffBar = d => `<span class="diff">${[1, 2, 3, 4, 5].map(i => `<i class="${i <= d ? 'on' : ''}"></i>`).join('')}</span>`;
+function poiPopup(p) {
+  return `<b class="t">${esc(p.name)}</b><span class="tag info" style="border-color:${CAT[p.cat]?.color}">${catName(p.cat)}</span> ${diffBar(p.diff)}<br>
+    <div style="margin:6px 0;color:#b9c3cf">${esc(p.desc).slice(0, 140)}${p.desc.length > 140 ? '…' : ''}</div>
+    ${p.photos?.length ? `<div class="photo-grid">${p.photos.slice(0, 3).map(ph => `<img src="${ph}">`).join('')}</div>` : ''}
+    <div style="font-size:11px;color:#8b98a8;margin:6px 0">★ ${avgRating(p).toFixed(1)} (${p.ratings.length}) · ${esc(p.author)} · ${fmtD(p.date)}</div>
+    <div class="chips"><button class="btn xs" data-act="poiDetail" data-id="${p.id}">${ic('eye')} Detalji</button><button class="btn xs" data-act="weather" data-id="${p.id}">${ic('sun')} ${t('weather')}</button><button class="btn xs amber" data-act="navigate" data-lat="${p.lat}" data-lng="${p.lng}">${ic('nav')} ${t('navigate')}</button></div>`;
+}
+function focusPoi(id) { const p = S.pois.find(x => x.id === id); if (!p) return; closeModal(); if (S.settings.view !== 'map') go('map'); setTimeout(() => { map.setView([p.lat, p.lng], Math.max(map.getZoom(), 13)); poiLayer.eachLayer(m => { if (m.getLatLng().lat === p.lat && m.getLatLng().lng === p.lng) m.openPopup(); }); }, 80); }
+
+/* ---------- POI forma / detalji ---------- */
+function openPoiForm(id, latlng) {
+  const p = id ? S.pois.find(x => x.id === id) : { name: '', cat: 'enduro', diff: 3, desc: '', lat: latlng.lat, lng: latlng.lng, photos: [] };
+  if (!requirePerm(id ? 'edit' : 'add', p.authorId)) return;
+  openModal(`${modalHead(id ? t('edit') + ': ' + p.name : 'Nova tačka', 'pin')}
+    <label class="f">${t('name')} *</label><input id="p-name" value="${esc(p.name)}">
+    <div class="f3"><div><label class="f">${t('category')}</label><select id="p-cat">${Object.keys(CAT).map(k => `<option value="${k}" ${p.cat === k ? 'selected' : ''}>${catName(k)}</option>`).join('')}</select></div>
+      <div><label class="f">${t('difficulty')} (1–5)</label><input id="p-diff" type="range" min="1" max="5" value="${p.diff}" oninput="$('#p-diffv').textContent=this.value"><div class="mono" id="p-diffv" style="text-align:center">${p.diff}</div></div>
+      <div><label class="f">Lat / Lng</label><input id="p-lat" type="number" step="0.00001" value="${p.lat.toFixed(5)}"><input id="p-lng" type="number" step="0.00001" value="${p.lng.toFixed(5)}" style="margin-top:4px"></div></div>
+    <label class="f">${t('description')}</label><textarea id="p-desc">${esc(p.desc)}</textarea>
+    <label class="f">${t('photos')}</label><div class="photo-grid" id="p-photos">${(p.photos || []).map((ph, i) => `<img src="${ph}" data-act="rmPhoto" data-i="${i}" title="Klikni za brisanje">`).join('')}</div>
+    <div class="chips" style="margin-top:6px"><label class="btn sm" style="cursor:pointer">${ic('camera')} Upload<input type="file" accept="image/*" multiple class="hidden" id="p-file"></label><input id="p-photourl" placeholder="ili URL slike" style="flex:1"><button class="btn sm" id="p-addurl">+</button></div>
+    <div class="actions">${id ? `<button class="btn danger" data-act="delPoi" data-id="${id}">${ic('trash')} ${t('delete')}</button>` : ''}<button class="btn ghost" data-act="closeModal">${t('cancel')}</button><button class="btn primary" id="p-save">${ic('check')} ${t('save')}</button></div>`);
+  const photos = [...(p.photos || [])];
+  const drawPhotos = () => $('#p-photos').innerHTML = photos.map((ph, i) => `<img src="${ph}" data-i="${i}" title="Klikni za brisanje">`).join('');
+  $('#p-photos').onclick = e => { if (e.target.tagName === 'IMG') { photos.splice(+e.target.dataset.i, 1); drawPhotos(); } };
+  $('#p-file').onchange = async e => { for (const f of e.target.files) photos.push(await readFileAsDataURL(f)); drawPhotos(); };
+  $('#p-addurl').onclick = () => { const u = $('#p-photourl').value.trim(); if (u) { photos.push(u); $('#p-photourl').value = ''; drawPhotos(); } };
+  $('#p-save').onclick = () => {
+    if (!validate(['p-name'])) return;
+    const lat = num('p-lat'), lng = num('p-lng'); if (Math.abs(lat) > 90 || Math.abs(lng) > 180) { toast('Neispravne koordinate', true); return; }
+    const data = { name: formVal('p-name').trim(), cat: formVal('p-cat'), diff: +formVal('p-diff'), desc: formVal('p-desc').trim(), lat, lng, photos };
+    mutate(s => {
+      if (id) { const x = s.pois.find(y => y.id === id); Object.assign(x, data); x.history.push({ user: me().name, date: today(), action: 'izmenjeno' }); }
+      else s.pois.push({ id: uid(), ...data, author: me().name, authorId: me().id, date: today(), ratings: [], comments: [], history: [{ user: me().name, date: today(), action: 'kreirano' }] });
+    }, (id ? 'izmenio tačku „' : 'dodao tačku „') + data.name + '"');
+    closeModal();
+  };
+}
+function poiDetail(id) {
+  const p = S.pois.find(x => x.id === id); if (!p) return; const u = me(); const myR = p.ratings.find(r => r.user === u.name)?.v || 0;
+  openModal(`${modalHead(p.name, 'pin')}
+    <div class="chips"><span class="tag info" style="border-color:${CAT[p.cat]?.color}">${catName(p.cat)}</span><span class="tag dim">${t('difficulty')} ${p.diff}/5</span><span class="tag dim">${esc(p.author)} · ${fmtD(p.date)}</span><span class="tag dim mono">${p.lat.toFixed(5)}, ${p.lng.toFixed(5)}</span></div>
+    <p style="margin:10px 0">${esc(p.desc) || '<i style="color:var(--dim)">Bez opisa</i>'}</p>
+    ${p.photos?.length ? `<div class="photo-grid" style="margin-bottom:10px">${p.photos.map(ph => `<img src="${ph}" style="width:110px;height:80px" onclick="window.open(this.src)">`).join('')}</div>` : ''}
+    <div class="grid g2">
+      <div><h3>${t('rating')} · ★ ${avgRating(p).toFixed(1)} (${p.ratings.length})</h3><div class="chips" id="rateRow">${[1, 2, 3, 4, 5].map(i => `<button class="chip ${i <= myR ? 'on' : ''}" data-act="rate" data-id="${id}" data-v="${i}">★ ${i}</button>`).join('')}</div></div>
+      <div><h3>${t('weather')}</h3><div id="wxBox" class="muted" style="font-size:12px"><button class="btn sm" data-act="weather" data-id="${id}">${ic('sun')} Učitaj prognozu</button></div></div>
+    </div>
+    <h3 style="margin-top:14px">${t('comments')} (${p.comments.length})</h3>
+    <div id="cmts">${p.comments.map(c => `<div class="comment"><b>${esc(c.user)}</b><small>${fmtD(c.date)}</small><br>${esc(c.text)}</div>`).join('') || '<div class="empty" style="padding:8px">—</div>'}</div>
+    <div class="chips" style="margin-top:8px"><input id="c-text" placeholder="Komentar..." style="flex:1"><button class="btn sm" data-act="comment" data-id="${id}">${ic('chat')} ${t('add')}</button></div>
+    <details style="margin-top:12px"><summary class="muted" style="cursor:pointer;font-size:12px">${t('history')} (${p.history.length})</summary>${p.history.map(h => `<div class="comment"><b>${esc(h.user)}</b><small>${fmtD(h.date)}</small> ${esc(h.action)}</div>`).join('')}</details>
+    <div class="actions"><button class="btn amber" data-act="navigate" data-lat="${p.lat}" data-lng="${p.lng}">${ic('nav')} ${t('navigate')}</button><button class="btn" data-act="tripFromPoi" data-id="${id}">${ic('trips')} ${t('add_trip')}</button>${can('edit', p.authorId) ? `<button class="btn" data-act="editPoi" data-id="${id}">${ic('edit')} ${t('edit')}</button>` : ''}</div>`, true);
+}
+function ratePoi(id, v) { mutate(s => { const p = s.pois.find(x => x.id === id); p.ratings = p.ratings.filter(r => r.user !== me().name); p.ratings.push({ user: me().name, v }); p.history.push({ user: me().name, date: today(), action: 'ocena ' + v + '★' }); }, `ocenio „${pname(id)}" sa ${v}★`, { silent: true }); poiDetail(id); }
+function commentPoi(id) { const txt = formVal('c-text').trim(); if (!txt) return; mutate(s => { s.pois.find(x => x.id === id).comments.push({ user: me().name, text: txt, date: today() }); }, `komentarisao „${pname(id)}"`, { silent: true }); poiDetail(id); }
+function navigateTo(lat, lng) {
+  openModal(`${modalHead(t('navigate'), 'nav')}<div class="sos-big">${(+lat).toFixed(6)}, ${(+lng).toFixed(6)}</div>
+    <div class="grid g2"><a class="btn full" href="https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}&travelmode=driving" target="_blank" rel="noopener">${ic('map')} Google Maps</a>
+    <a class="btn full" href="geo:${lat},${lng}?q=${lat},${lng}">${ic('nav')} OsmAnd / Geo app</a>
+    <a class="btn full" href="https://osmand.net/go?lat=${lat}&lon=${lng}&z=15" target="_blank" rel="noopener">OsmAnd (web link)</a>
+    <button class="btn full" data-act="copy" data-v="${lat},${lng}">${ic('copy')} Kopiraj koordinate</button></div>`);
+}
+
+/* ---------- vreme (Open-Meteo, bez ključa) ---------- */
+async function loadWeather(id) {
+  const p = S.pois.find(x => x.id === id); const box = $('#wxBox') || null;
+  const show = html => { if (box) box.innerHTML = html; else openModal(`${modalHead(t('weather') + ' – ' + p.name, 'sun')}${html}`); };
+  show('<div class="muted">Učitavam…</div>');
+  try {
+    const url = `https://api.open-meteo.com/v1/forecast?latitude=${p.lat}&longitude=${p.lng}&current=temperature_2m,precipitation,wind_speed_10m,weather_code&daily=precipitation_sum,temperature_2m_max,temperature_2m_min,wind_speed_10m_max&past_days=2&forecast_days=3&timezone=auto`;
+    const r = await fetch(url); if (!r.ok) throw 0; const w = await r.json();
+    const past48 = (w.daily.precipitation_sum[0] || 0) + (w.daily.precipitation_sum[1] || 0); const mud = past48 >= 3;
+    const days = w.daily.time.map((d, i) => `<tr><td>${fmtD(d)}${i < 2 ? ' <span class="tag dim">prošlo</span>' : i === 2 ? ' <span class="tag info">danas</span>' : ''}</td><td class="num">${U.temp(w.daily.temperature_2m_min[i])} / ${U.temp(w.daily.temperature_2m_max[i])}</td><td class="num">${n1(w.daily.precipitation_sum[i])} mm</td><td class="num">${n0(w.daily.wind_speed_10m_max[i])} km/h</td></tr>`).join('');
+    show(`<div class="wx"><div><div class="v">${U.temp(w.current.temperature_2m)}</div><div class="l">Temp.</div></div><div><div class="v">${n1(w.current.precipitation)} mm</div><div class="l">Padavine</div></div><div><div class="v">${n0(w.current.wind_speed_10m)} km/h</div><div class="l">Vetar</div></div></div>
+      <div class="tag ${mud ? 'bad' : 'ok'}" style="display:block;text-align:center;margin:10px 0;padding:6px">${mud ? ic('rain') + ' ' + t('mud_risk') + ` (${n1(past48)} mm)` : ic('sun') + ' ' + t('dry')}</div>
+      <table><tr><th>Dan</th><th class="num">Min/Max</th><th class="num">Kiša</th><th class="num">Vetar</th></tr>${days}</table><div class="muted" style="font-size:10px;margin-top:4px">Izvor: Open-Meteo</div>`);
+  } catch (e) { show('<div class="tag bad">Prognoza nedostupna (offline?)</div>'); }
+}
+
+/* ---------- rute ---------- */
+function renderRouteCard() {
+  const el = $('#routeCard'); if (!el) return; const r = S.routes.find(x => x.id === activeRouteId);
+  el.innerHTML = `<h3>${t('route')} <span class="r">${mode === 'draw' ? `<button class="btn xs primary" data-act="finishDraw">${ic('check')} Završi (${drawPts.length})</button><button class="btn xs ghost" data-act="cancelDraw">${t('cancel')}</button>` : ''}</span></h3>
+    <select id="routeSel" style="margin-bottom:8px"><option value="">— izaberi rutu —</option>${S.routes.map(x => `<option value="${x.id}" ${x.id === activeRouteId ? 'selected' : ''}>${esc(x.name)} (${U.dist(pathLength(x.points))})</option>`).join('')}</select>
+    ${r ? `<div class="grid g2" style="gap:8px"><div class="stat"><div class="lbl">${t('length')}</div><div class="val" style="font-size:20px">${U.dist(pathLength(r.points))}</div></div><div class="stat"><div class="lbl">${t('duration')}</div><div class="val amber" style="font-size:20px">${estDuration(r)}</div></div></div>
+      <div class="chips" style="margin-top:8px"><button class="btn xs" data-act="elevation" data-id="${r.id}">${ic('mountain')} ${t('elevation')}</button><button class="btn xs" data-act="exportRoute" data-id="${r.id}">GPX</button><button class="btn xs" data-act="routeStart" data-id="${r.id}">${ic('nav')} Start</button>${can('delete', r.authorId) ? `<button class="btn xs danger" data-act="delRoute" data-id="${r.id}">${ic('trash')}</button>` : ''}</div><div id="eleBox"></div>` : `<div class="muted" style="font-size:12px">Klikni „${t('draw_route')}" pa klikom na mapu dodaj tačke; dupli klik ili „Završi" za kraj.</div>`}`;
+  $('#routeSel').onchange = e => showRoute(e.target.value);
+}
+function estDuration(r) { const km = pathLength(r.points); const h = km / SPEED.default; const hh = Math.floor(h), mm = Math.round((h - hh) * 60); return `${hh}h ${String(mm).padStart(2, '0')}m`; }
+function showRoute(id) {
+  activeRouteId = id || null; routeLayer.clearLayers(); const r = S.routes.find(x => x.id === id);
+  if (r) { const pl = L.polyline(r.points, { color: '#00e5ff', weight: 4, opacity: .9, dashArray: '1 0' }).addTo(routeLayer); L.polyline(r.points, { color: '#000', weight: 8, opacity: .35 }).addTo(routeLayer).bringToBack(); L.circleMarker(r.points[0], { radius: 6, color: '#2ee6a6', fillOpacity: 1 }).addTo(routeLayer); L.circleMarker(r.points[r.points.length - 1], { radius: 6, color: '#ff4d5e', fillOpacity: 1 }).addTo(routeLayer); map.fitBounds(pl.getBounds().pad(.15)); }
+  renderRouteCard();
+}
+function startDraw() { if (!requirePerm('add')) return; mode = 'draw'; drawPts = []; $('#drawBtn').classList.add('on'); $('#measureBtn').classList.remove('on'); map.doubleClickZoom.disable(); toast('Klikni na mapu za tačke rute'); renderRouteCard(); }
+function redrawDraft() { drawLayer.clearLayers(); if (drawPts.length) L.polyline(drawPts, { color: '#ffb020', weight: 3, dashArray: '6 6' }).addTo(drawLayer); drawPts.forEach(p => L.circleMarker(p, { radius: 4, color: '#ffb020', fillOpacity: 1 }).addTo(drawLayer)); renderRouteCard(); }
+function cancelDraw() { mode = null; drawPts = []; drawLayer.clearLayers(); $('#drawBtn').classList.remove('on'); map.doubleClickZoom.enable(); renderRouteCard(); }
+function finishDraw() {
+  if (drawPts.length < 2) { toast('Potrebne su bar 2 tačke', true); return; }
+  const pts = drawPts.slice(); cancelDraw();
+  openModal(`${modalHead('Sačuvaj rutu', 'trips')}<label class="f">${t('name')}</label><input id="r-name" value="Ruta ${fmtD(today())}"><div class="muted" style="margin-top:8px">${pts.length} tačaka · ${U.dist(pathLength(pts))}</div><div class="actions"><button class="btn ghost" data-act="closeModal">${t('cancel')}</button><button class="btn primary" id="r-save">${t('save')}</button></div>`);
+  $('#r-save').onclick = () => { const name = formVal('r-name').trim() || 'Ruta'; const id = uid(); mutate(s => s.routes.push({ id, name, points: pts, author: me().name, authorId: me().id, date: today(), ele: null }), `nacrtao rutu „${name}"`); closeModal(); showRoute(id); };
+}
+function delRoute(id) { confirmBox(t('confirm_delete'), () => { mutate(s => { s.routes = s.routes.filter(r => r.id !== id); s.events.forEach(e => { if (e.routeId === id) e.routeId = ''; }); }, 'obrisao rutu'); activeRouteId = null; routeLayer.clearLayers(); renderRouteCard(); }); }
+function startMeasure() { if (mode === 'measure') { mode = null; measurePts = []; measureLayer.clearLayers(); $('#measureBtn').classList.remove('on'); return; } mode = 'measure'; measurePts = []; $('#measureBtn').classList.add('on'); $('#drawBtn').classList.remove('on'); toast('Klikni tačke za merenje; ponovo klikni Merenje za kraj'); }
+function redrawMeasure() { measureLayer.clearLayers(); if (measurePts.length > 1) { L.polyline(measurePts, { color: '#ffd23f', weight: 2, dashArray: '4 6' }).addTo(measureLayer); const d = pathLength(measurePts); L.marker(measurePts[measurePts.length - 1], { icon: L.divIcon({ className: '', html: `<div class="tag warn" style="background:#101820;white-space:nowrap">${U.dist(d)}</div>`, iconAnchor: [-6, 10] }) }).addTo(measureLayer); } measurePts.forEach(p => L.circleMarker(p, { radius: 3, color: '#ffd23f', fillOpacity: 1 }).addTo(measureLayer)); }
+
+/* ---------- visinski profil: Open-Elevation, fallback simulacija ---------- */
+async function showElevation(id) {
+  const r = S.routes.find(x => x.id === id); const box = $('#eleBox'); box.innerHTML = '<div class="muted">Učitavam visine…</div>';
+  // uzorkuj rutu na max 80 tačaka ravnomerno po dužini
+  const total = pathLength(r.points), N = Math.min(80, Math.max(10, Math.round(total * 4))); const samples = []; let acc = 0, seg = 0;
+  for (let i = 0; i < N; i++) { const target = total * i / (N - 1); while (seg < r.points.length - 2 && acc + haversine(r.points[seg], r.points[seg + 1]) < target) { acc += haversine(r.points[seg], r.points[seg + 1]); seg++; } const a = r.points[seg], b = r.points[Math.min(seg + 1, r.points.length - 1)]; const L2 = haversine(a, b) || 1; const f = clamp((target - acc) / L2, 0, 1); samples.push({ lat: a[0] + (b[0] - a[0]) * f, lng: a[1] + (b[1] - a[1]) * f, d: target }); }
+  let ele = r.ele && r.ele.length === N ? r.ele : null, src = 'keš';
+  if (!ele) {
+    try { const res = await fetch('https://api.open-elevation.com/api/v1/lookup', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ locations: samples.map(s => ({ latitude: s.lat, longitude: s.lng })) }) }); if (!res.ok) throw 0; const j = await res.json(); ele = j.results.map(x => x.elevation); src = 'Open-Elevation'; r.ele = ele; persist(); }
+    catch (e) { let h = 600 + Math.random() * 400; ele = samples.map((s, i) => { h += (Math.sin(i / 5) * 18) + (Math.random() - .5) * 25; return Math.round(h); }); src = 'simulacija (API nedostupan)'; }
+  }
+  let up = 0, down = 0; for (let i = 1; i < ele.length; i++) { const d = ele[i] - ele[i - 1]; if (d > 0) up += d; else down -= d; }
+  box.innerHTML = `<div class="chips" style="margin:8px 0"><span class="tag ok">↑ ${n0(up)} m</span><span class="tag warn">↓ ${n0(down)} m</span><span class="tag dim">min ${n0(Math.min(...ele))} m · max ${n0(Math.max(...ele))} m</span><span class="tag dim">${src}</span></div><canvas class="chart" id="eleChart" height="120"></canvas>`;
+  if (typeof Chart === 'undefined') return;
+  new Chart($('#eleChart'), { type: 'line', data: { labels: samples.map(s => U.distN(s.d)), datasets: [{ data: ele, borderColor: '#00e5ff', backgroundColor: 'rgba(0,229,255,.15)', fill: true, pointRadius: 0, tension: .3, borderWidth: 2 }] }, options: chartOpts({ x: U.distU(), y: 'm' }) });
+}
+function chartOpts(axes = {}) {
+  const c = getComputedStyle(document.documentElement); const grid = c.getPropertyValue('--line2').trim() || 'rgba(255,255,255,.08)'; const txt = c.getPropertyValue('--muted').trim() || '#8b98a8';
+  return { responsive: true, maintainAspectRatio: false, animation: { duration: 700 }, plugins: { legend: { display: axes.legend ?? false, labels: { color: txt, boxWidth: 10 } }, tooltip: { backgroundColor: '#101820', borderColor: '#00e5ff55', borderWidth: 1 } }, scales: { x: { grid: { color: grid }, ticks: { color: txt, maxTicksLimit: 8, font: { family: 'JetBrains Mono', size: 10 } }, title: { display: !!axes.x, text: axes.x, color: txt } }, y: { grid: { color: grid }, ticks: { color: txt, font: { family: 'JetBrains Mono', size: 10 } }, title: { display: !!axes.y, text: axes.y, color: txt }, beginAtZero: axes.zero ?? false } } };
+}
+
+/* ---------- GPX / KML ---------- */
+function importTrackFile(file) {
+  if (!file || !requirePerm('add')) return;
+  const rd = new FileReader(); rd.onload = () => {
+    try {
+      const xml = new DOMParser().parseFromString(rd.result, 'application/xml'); const isKml = /kml/i.test(file.name) || xml.querySelector('kml');
+      let tracks = [], wpts = [];
+      if (isKml) {
+        xml.querySelectorAll('Placemark').forEach(pm => { const name = pm.querySelector('name')?.textContent || file.name; const ls = pm.querySelector('LineString coordinates'); const pt = pm.querySelector('Point coordinates'); if (ls) tracks.push({ name, pts: ls.textContent.trim().split(/\s+/).map(c => c.split(',')).map(c => [+c[1], +c[0]]) }); if (pt) { const c = pt.textContent.trim().split(','); wpts.push({ name, lat: +c[1], lng: +c[0], desc: pm.querySelector('description')?.textContent || '' }); } });
+      } else {
+        xml.querySelectorAll('trk,rte').forEach(tr => { const name = tr.querySelector('name')?.textContent || file.name; const pts = [...tr.querySelectorAll('trkpt,rtept')].map(p => [+p.getAttribute('lat'), +p.getAttribute('lon')]); if (pts.length > 1) tracks.push({ name, pts, ele: [...tr.querySelectorAll('ele')].map(e => +e.textContent) }); });
+        xml.querySelectorAll('wpt').forEach(w => wpts.push({ name: w.querySelector('name')?.textContent || 'Waypoint', lat: +w.getAttribute('lat'), lng: +w.getAttribute('lon'), desc: w.querySelector('desc')?.textContent || '' }));
+      }
+      if (!tracks.length && !wpts.length) { toast('Nema ruta ni tačaka u fajlu', true); return; }
+      let lastId = null;
+      mutate(s => {
+        tracks.forEach(tr => { const pts = tr.pts.filter((p, i) => i % Math.max(1, Math.floor(tr.pts.length / 1500)) === 0); lastId = uid(); s.routes.push({ id: lastId, name: tr.name, points: pts, author: me().name, authorId: me().id, date: today(), ele: null }); });
+        wpts.forEach(w => s.pois.push({ id: uid(), name: w.name, cat: 'enduro', diff: 2, desc: w.desc, lat: w.lat, lng: w.lng, photos: [], author: me().name, authorId: me().id, date: today(), ratings: [], comments: [], history: [{ user: me().name, date: today(), action: 'uvezeno iz ' + file.name }] }));
+      }, `uvezao ${tracks.length} ruta i ${wpts.length} tačaka iz ${file.name}`);
+      if (lastId) showRoute(lastId);
+    } catch (e) { toast('Greška pri čitanju fajla', true); }
+  }; rd.readAsText(file); $('#gpxFile').value = '';
+}
+function gpxString(routes, pois) {
+  return `<?xml version="1.0" encoding="UTF-8"?>\n<gpx version="1.1" creator="TRAILCOMMAND" xmlns="http://www.topografix.com/GPX/1/1">\n` +
+    pois.map(p => `  <wpt lat="${p.lat}" lon="${p.lng}"><name>${esc(p.name)}</name><desc>${esc(p.desc)}</desc><type>${p.cat}</type></wpt>`).join('\n') + '\n' +
+    routes.map(r => `  <trk><name>${esc(r.name)}</name><trkseg>\n${r.points.map((p, i) => `    <trkpt lat="${p[0]}" lon="${p[1]}">${r.ele && r.ele[i] != null ? `<ele>${r.ele[i]}</ele>` : ''}</trkpt>`).join('\n')}\n  </trkseg></trk>`).join('\n') + '\n</gpx>';
+}
+function kmlString(routes, pois) {
+  return `<?xml version="1.0" encoding="UTF-8"?>\n<kml xmlns="http://www.opengis.net/kml/2.2"><Document><name>TRAILCOMMAND</name>\n` +
+    pois.map(p => `<Placemark><name>${esc(p.name)}</name><description>${esc(p.desc)}</description><Point><coordinates>${p.lng},${p.lat},0</coordinates></Point></Placemark>`).join('\n') + '\n' +
+    routes.map(r => `<Placemark><name>${esc(r.name)}</name><LineString><tessellate>1</tessellate><coordinates>${r.points.map(p => `${p[1]},${p[0]},0`).join(' ')}</coordinates></LineString></Placemark>`).join('\n') + '\n</Document></kml>';
+}
+
+/* ---------- heatmap ---------- */
+function buildHeat() {
+  if (typeof L.heatLayer !== 'function') { toast('Heat sloj nije učitan', true); return; }
+  const pts = []; S.pois.forEach(p => pts.push([p.lat, p.lng, .35])); S.trips.forEach(tr => { const p = S.pois.find(x => x.id === tr.poiId); if (p) pts.push([p.lat, p.lng, clamp(tr.hours / 3, .4, 1.2)]); });
+  if (heatLayer) map.removeLayer(heatLayer); heatLayer = L.heatLayer(pts, { radius: 35, blur: 25, maxZoom: 11, gradient: { .3: '#0033ff', .6: '#00e5ff', .8: '#ffb020', 1: '#ff4d5e' } }).addTo(map);
+}
+function toggleHeat() { if (heatLayer) { map.removeLayer(heatLayer); heatLayer = null; $('#heatBtn').classList.remove('on'); } else { buildHeat(); $('#heatBtn').classList.add('on'); } }
+
+/* ---------- geolokacija ---------- */
+function locate(cb) {
+  if (!navigator.geolocation) { toast('GPS nije dostupan', true); return; }
+  toast('Tražim lokaciju…');
+  navigator.geolocation.getCurrentPosition(pos => {
+    myPos = [pos.coords.latitude, pos.coords.longitude];
+    if (map) { if (myMarker) map.removeLayer(myMarker); myMarker = L.marker(myPos, { icon: L.divIcon({ className: '', iconSize: [18, 18], iconAnchor: [9, 9], html: '<div class="pin me" style="width:18px;height:18px"><div class="b"></div></div>' }) }).addTo(map).bindPopup(`Ti si ovde<br><button class="btn xs" data-act="poiHere">${ic('plus')} Tačka ovde</button>`); map.setView(myPos, Math.max(map.getZoom(), 13)); renderMapSide(); }
+    cb && cb(myPos);
+  }, () => toast('Lokacija odbijena ili nedostupna', true), { enableHighAccuracy: true, timeout: 12000, maximumAge: 30000 });
+}
+</script>
+<script>
+/* ================================================================== */
+/*  FLEET MODUL – vozila, intervali, merači, servisna knjižica,       */
+/*  vožnje, gorivo, delovi, troškovi, specifikacije                   */
+/* ================================================================== */
+let fleetVid = null; const curVeh = () => S.vehicles.find(v => v.id === fleetVid) || S.vehicles[0];
+
+/* status jedne stavke održavanja: istrošenost (0..1+) i preostalo */
+function svcStatus(v, s) {
+  const parts = [];
+  if (s.intH) parts.push({ pct: (v.hours - (s.lastH || 0)) / s.intH, rem: (s.lastH || 0) + s.intH - v.hours, unit: 'h' });
+  if (s.intKm) parts.push({ pct: (v.km - (s.lastKm || 0)) / s.intKm, rem: (s.lastKm || 0) + s.intKm - v.km, unit: 'km' });
+  if (s.intM && s.lastDate) { const d = daysBetween(s.lastDate, today()); parts.push({ pct: d / (s.intM * 30.4), rem: Math.round(s.intM * 30.4 - d), unit: t('days') }); }
+  if (!parts.length) return { pct: 0, rem: Infinity, unit: '', level: 'ok', text: '—' };
+  const w = parts.reduce((a, b) => b.pct > a.pct ? b : a);
+  const level = w.pct >= 1 ? 'bad' : w.pct >= .8 ? 'warn' : 'ok';
+  const ar = Math.abs(w.rem); const text = w.unit === 'h' ? n1(ar) + ' h' : w.unit === 'km' ? n0(ar) + ' km' : n0(ar) + ' ' + t('days');
+  return { pct: w.pct, rem: w.rem, unit: w.unit, level, text, all: parts };
+}
+function fleetAlerts() { let bad = 0, warn = 0; S.vehicles.forEach(v => v.services.forEach(s => { const l = svcStatus(v, s).level; if (l === 'bad') bad++; else if (l === 'warn') warn++; })); return { bad, warn }; }
+const lowParts = () => S.parts.filter(p => p.qty <= p.min);
+const lastServiceOf = v => S.services.filter(s => s.vehicleId === v.id).sort((a, b) => b.date.localeCompare(a.date))[0];
+function nextSvc(v) { return v.services.map(s => ({ s, st: svcStatus(v, s) })).sort((a, b) => b.st.pct - a.st.pct)[0]; }
+function expiryTag(d, label) { if (!d) return ''; const n = daysBetween(today(), d); return `<span class="tag ${n < 0 ? 'bad' : n < 30 ? 'warn' : 'ok'}">${label}: ${n < 0 ? t('expired') : fmtD(d) + ' (' + n + ' ' + t('days') + ')'}</span>`; }
+
+/* SVG polukružni merač */
+function gaugeSvg(pct, level) {
+  const p = clamp(pct, 0, 1); const r = 42, cx = 55, cy = 55; const a = Math.PI * (1 - p); const x = cx + r * Math.cos(a), y = cy - r * Math.sin(a);
+  const col = level === 'bad' ? 'var(--red)' : level === 'warn' ? 'var(--yellow)' : 'var(--green)';
+  const arc = (from, to, color, w = 7) => { const a1 = Math.PI * (1 - from), a2 = Math.PI * (1 - to); return `<path d="M${cx + r * Math.cos(a1)} ${cy - r * Math.sin(a1)} A${r} ${r} 0 ${to - from > .5 ? 1 : 0} 1 ${cx + r * Math.cos(a2)} ${cy - r * Math.sin(a2)}" stroke="${color}" stroke-width="${w}" fill="none" stroke-linecap="butt"/>`; };
+  return `<svg viewBox="0 0 110 62">${arc(0, .8, 'rgba(46,230,166,.18)')}${arc(.8, 1, 'rgba(255,210,63,.18)')}${arc(.98, 1, 'rgba(255,77,94,.4)')}
+    ${p > 0 ? arc(0, p, col) : ''}<line x1="${cx}" y1="${cy}" x2="${x}" y2="${y}" stroke="var(--text)" stroke-width="2" stroke-linecap="round"/><circle cx="${cx}" cy="${cy}" r="3.5" fill="var(--text)"/></svg>`;
+}
+function vehSelector() { return `<div class="vsel">${S.vehicles.map(v => { const n = nextSvc(v); return `<button class="${curVeh()?.id === v.id ? 'active' : ''}" data-act="selVeh" data-id="${v.id}">${ic(v.type === 'utv' ? 'buggy' : 'moto')}${esc(v.name)}<span class="st" style="background:var(--${n?.st.level === 'bad' ? 'red' : n?.st.level === 'warn' ? 'yellow' : 'green'})"></span></button>`; }).join('')}<button data-act="vehForm">${ic('plus')} ${t('vehicle')}</button></div>`; }
+
+/* ---------- DASHBOARD ---------- */
+function renderDashboard() {
+  const al = fleetAlerts(); const totH = S.vehicles.reduce((a, v) => a + v.hours, 0), totKm = S.vehicles.reduce((a, v) => a + v.km, 0);
+  const upcoming = S.events.filter(e => e.date >= today()).sort((a, b) => a.date.localeCompare(b.date)).slice(0, 3);
+  const warnings = [];
+  S.vehicles.forEach(v => { v.services.forEach(s => { const st = svcStatus(v, s); if (st.level !== 'ok') warnings.push({ v, s, st }); }); ['regExpiry', 'insExpiry'].forEach(k => { if (v[k] && daysBetween(today(), v[k]) < 30) warnings.push({ v, s: { name: (k === 'regExpiry' ? t('registration') : t('insurance')) + ' ' + t('expires') + ' ' + fmtD(v[k]) }, st: { level: daysBetween(today(), v[k]) < 0 ? 'bad' : 'warn', text: daysBetween(today(), v[k]) + ' ' + t('days'), pct: 1 } }); }); });
+  warnings.sort((a, b) => b.st.pct - a.st.pct);
+  const month = monthKey(today()); const mHours = S.trips.filter(x => monthKey(x.date) === month).reduce((a, x) => a + x.hours, 0);
+  $('#v-dashboard').innerHTML = `<div class="vhead"><h1>${t('nav_dashboard')}<small>SYSTEM STATUS · ${S.vehicles.length} VEHICLES · ${S.pois.length} POI</small></h1><div class="tools"><button class="btn sm" data-act="tripForm">${ic('trips')} ${t('add_trip')}</button><button class="btn sm" data-act="svcForm">${ic('service')} ${t('add_service')}</button><button class="btn sm" data-act="go" data-v="map">${ic('map')} ${t('nav_map')}</button></div></div>
+    <div class="grid g4">
+      <div class="card stat"><span class="corner tl"></span><span class="corner br"></span><div class="lbl">${t('total_hours')}</div><div class="val" data-count="${totH}" data-dec="1">0</div><div class="sub">${t('all_vehicles')}</div></div>
+      <div class="card stat"><div class="lbl">${t('total_km')}</div><div class="val" data-count="${U.distN(totKm)}" data-dec="0">0</div><div class="sub">${U.distU()}</div></div>
+      <div class="card stat ${al.bad ? 'red' : al.warn ? 'amber' : ''}"><div class="lbl">${t('overdue_items')}</div><div class="val ${al.bad ? 'red' : al.warn ? 'amber' : 'green'}" data-count="${al.bad}">0</div><div class="sub">${al.warn} ${t('soon').toLowerCase()}</div></div>
+      <div class="card stat"><div class="lbl">Sati ovog meseca</div><div class="val amber" data-count="${mHours}" data-dec="1">0</div><div class="sub">${S.trips.filter(x => monthKey(x.date) === month).length} vožnji</div></div>
+    </div>
+    <div class="grid g3" style="margin-top:14px">
+      <div class="card span2"><h3>${ic('warn')} ${t('warnings')} <span class="r"><span class="tag bad">${al.bad} ${t('urgent')}</span><span class="tag warn">${al.warn} ${t('soon')}</span></span></h3>
+        ${warnings.length ? warnings.slice(0, 8).map(w => `<div class="li" style="cursor:pointer" data-act="goFleet" data-id="${w.v.id}"><span class="tag ${w.st.level}">${w.st.level === 'bad' ? t('urgent') : t('soon')}</span><div class="t"><b>${esc(w.s.name)}</b><small>${esc(w.v.name)}</small></div><span class="mono" style="color:var(--${w.st.level === 'bad' ? 'red' : 'yellow'})">${w.st.rem < 0 ? 'KASNI ' : ''}${esc(w.st.text)}</span></div>`).join('') : `<div class="empty">${ic('check')} Sve je u zelenoj zoni.</div>`}</div>
+      <div class="card"><h3>${ic('planner')} ${t('nav_planner')}</h3>${upcoming.length ? upcoming.map(e => `<div class="li" data-act="goView" data-id="planner" style="cursor:pointer"><div class="t"><b>${esc(e.title)}</b><small>${fmtD(e.date)} · ${e.participants.length} učesnika</small></div><span class="mono" style="color:var(--cyan)">${daysBetween(today(), e.date)}d</span></div>`).join('') : '<div class="empty">Nema planiranih izlazaka</div>'}</div>
+    </div>
+    <div class="grid g2" style="margin-top:14px">${S.vehicles.map(v => { const n = nextSvc(v); const ls = lastServiceOf(v); return `<div class="card" style="cursor:pointer" data-act="goFleet" data-id="${v.id}"><h3>${ic(v.type === 'utv' ? 'buggy' : 'moto')} ${esc(v.name)} <span class="r">${expiryTag(v.regExpiry, 'REG')}</span></h3>
+        <div class="grid g3" style="gap:8px"><div class="stat"><div class="lbl">${t('hours')}</div><div class="val" style="font-size:22px">${n1(v.hours)}</div></div><div class="stat"><div class="lbl">${U.distU()}</div><div class="val" style="font-size:22px">${n0(U.distN(v.km))}</div></div><div class="stat"><div class="lbl">${t('since_service')}</div><div class="val amber" style="font-size:22px">${ls ? n1(v.hours - ls.hours) : '—'}</div></div></div>
+        ${n ? `<div style="margin-top:10px;font-size:12px" class="muted">${t('next_service')}: <b style="color:var(--text)">${esc(n.s.name)}</b> · <span class="mono" style="color:var(--${n.st.level === 'bad' ? 'red' : n.st.level === 'warn' ? 'yellow' : 'green'})">${n.st.rem < 0 ? 'KASNI ' : ''}${n.st.text}</span></div><div class="bar" style="margin-top:6px"><i class="${n.st.level}" style="width:${clamp(n.st.pct * 100, 0, 100)}%"></i></div>` : ''}</div>`; }).join('')}</div>
+    <div class="grid g2" style="margin-top:14px"><div class="card"><h3>${ic('team')} ${t('activity')}</h3><div class="feed">${S.activity.slice(0, 6).map(a => `<div class="li"><div class="av" style="width:24px;height:24px;border-radius:50%;background:var(--cyan2);color:var(--cyan);display:grid;place-items:center;font-size:11px;font-weight:700">${esc(a.user.slice(0, 1))}</div><div class="t"><small style="color:var(--text)"><b>${esc(a.user)}</b> ${esc(a.text)}</small><small>${new Date(a.date).toLocaleString('sr-Latn')}</small></div></div>`).join('')}</div></div>
+      <div class="card"><h3>${ic('parts')} ${t('nav_parts')} – manjak</h3>${lowParts().length ? lowParts().map(p => `<div class="li"><span class="tag warn">${p.qty}/${p.min}</span><div class="t"><b>${esc(p.name)}</b><small>${esc(p.partNo)} · ${vname(p.vehicleId)}</small></div></div>`).join('') : '<div class="empty">Inventar OK</div>'}</div></div>`;
+  animateCounters($('#v-dashboard'));
+}
+
+/* ---------- FLOTA ---------- */
+function renderFleet() {
+  const v = curVeh(); if (!v) { $('#v-fleet').innerHTML = `<div class="vhead"><h1>${t('nav_fleet')}</h1></div>${vehSelector()}<div class="empty">Dodaj prvo vozilo.</div>`; return; }
+  const ls = lastServiceOf(v); const n = nextSvc(v); const items = v.services.map(s => ({ s, st: svcStatus(v, s) })).sort((a, b) => b.st.pct - a.st.pct); const urgent = items.filter(i => i.st.level === 'bad');
+  const fuelL = S.fuel.filter(f => f.vehicleId === v.id); const trips = S.trips.filter(x => x.vehicleId === v.id);
+  $('#v-fleet').innerHTML = `<div class="vhead"><h1>${esc(v.name)}<small>${esc(v.brand || '')} ${esc(v.model || '')} · ${v.year || ''} · VIN ${esc(v.vin || '—')}</small></h1>
+      <div class="tools"><button class="btn sm" data-act="tripForm" data-id="${v.id}">${ic('trips')} ${t('add_trip')}</button><button class="btn sm primary" data-act="svcForm" data-id="${v.id}">${ic('service')} ${t('add_service')}</button><button class="btn sm" data-act="vehForm" data-id="${v.id}">${ic('edit')}</button></div></div>
+    ${vehSelector()}
+    <div class="grid g4">
+      <div class="card stat"><span class="corner tl"></span><span class="corner br"></span><div class="lbl">${t('total_hours')}</div><div class="val" data-count="${v.hours}" data-dec="1">0</div><div class="sub">${trips.length} vožnji upisano</div></div>
+      <div class="card stat"><div class="lbl">${t('total_km')}</div><div class="val" data-count="${U.distN(v.km)}">0</div><div class="sub">${U.distU()}</div></div>
+      <div class="card stat"><div class="lbl">${t('since_service')}</div><div class="val amber" data-count="${ls ? v.hours - ls.hours : 0}" data-dec="1">0</div><div class="sub">${ls ? fmtD(ls.date) + ' · ' + esc(ls.desc).slice(0, 30) : '—'}</div></div>
+      <div class="card stat ${n?.st.level === 'bad' ? 'red' : n?.st.level === 'warn' ? 'amber' : ''}"><div class="lbl">${t('next_service')}</div><div class="val ${n?.st.level === 'bad' ? 'red' : n?.st.level === 'warn' ? 'amber' : 'green'}" style="font-size:22px">${n ? (n.st.rem < 0 ? 'KASNI ' : '') + esc(n.st.text) : '—'}</div><div class="sub">${n ? esc(n.s.name) : ''}</div></div>
+    </div>
+    ${urgent.length ? `<div class="card red" style="margin-top:14px"><h3 style="color:var(--red)">${ic('warn')} ${t('urgent')} – ${t('overdue_items')} (${urgent.length})</h3>${urgent.map(i => `<div class="li"><span class="tag bad">${n0(clamp(i.st.pct, 0, 9) * 100)}%</span><div class="t"><b>${esc(i.s.name)}</b><small>${esc(i.s.note)}</small></div><button class="btn xs" data-act="svcForm" data-id="${v.id}" data-item="${i.s.id}">${ic('check')} Urađeno</button></div>`).join('')}</div>` : ''}
+    <div class="card" style="margin-top:14px"><h3>${ic('gauge')} Instrument tabla – ${t('wear')} po stavci <span class="r"><button class="btn xs" data-act="svcItemForm" data-id="${v.id}">${ic('plus')} Interval</button></span></h3>
+      <div class="gauges">${items.map(i => `<div class="gauge ${i.st.level}" data-act="svcItemForm" data-id="${v.id}" data-item="${i.s.id}">${gaugeSvg(i.st.pct, i.st.level)}<div class="gv" style="color:var(--${i.st.level === 'bad' ? 'red' : i.st.level === 'warn' ? 'yellow' : 'green'})">${n0(clamp(i.st.pct, 0, 9.99) * 100)}%</div><div class="gn">${esc(i.s.name)}</div><div class="gs">${i.st.rem < 0 ? 'KASNI ' : 'još '}${esc(i.st.text)}${i.st.all?.length > 1 ? ' · ' + i.st.all.filter(a => a !== i.st.all.reduce((x, y) => y.pct > x.pct ? y : x)).map(a => (a.rem < 0 ? '−' : '') + (a.unit === 'h' ? n1(Math.abs(a.rem)) : n0(Math.abs(a.rem))) + ' ' + a.unit).join(' · ') : ''}</div></div>`).join('')}</div></div>
+    <div class="grid g2" style="margin-top:14px">
+      <div class="card"><h3>${ic('fleet')} ${t('specs')}</h3><div class="spec">${(v.specs || []).map(s => `<div><span>${esc(s[0])}</span><span>${esc(s[1])}</span></div>`).join('')}</div><div class="muted" style="font-size:11px;margin-top:8px">${ic('warn')} ${t('verify_manual')}</div></div>
+      <div class="card"><h3>${ic('checklist')} Dokumenti i podaci</h3>
+        <div class="spec" style="grid-template-columns:1fr"><div><span>VIN</span><span>${esc(v.vin || '—')}</span></div><div><span>${t('registration')}</span><span>${esc(v.reg || '—')}</span></div><div><span>${t('registration')} ${t('expires')}</span><span>${fmtD(v.regExpiry)}</span></div><div><span>${t('insurance')} ${t('expires')}</span><span>${fmtD(v.insExpiry)}</span></div></div>
+        <div class="chips" style="margin-top:10px">${expiryTag(v.regExpiry, t('registration'))}${expiryTag(v.insExpiry, t('insurance'))}</div>
+        <h3 style="margin-top:14px">${ic('fuel')} ${t('nav_fuel')}</h3><div class="grid g2" style="gap:8px"><div class="stat"><div class="lbl">Prosek L/100km</div><div class="val" style="font-size:20px">${fuelAvg(v).per100 ? n1(fuelAvg(v).per100) : '—'}</div></div><div class="stat"><div class="lbl">Prosek L/h</div><div class="val" style="font-size:20px">${fuelAvg(v).perH ? n1(fuelAvg(v).perH) : '—'}</div></div></div>
+        ${v.notes ? `<p class="muted" style="font-size:12px;margin-top:10px">${esc(v.notes)}</p>` : ''}</div>
+    </div>`;
+  animateCounters($('#v-fleet'));
+}
+function fuelAvg(v) { const f = S.fuel.filter(x => x.vehicleId === v.id).sort((a, b) => a.date.localeCompare(b.date)); if (f.length < 2) return {}; const L = f.slice(1).reduce((a, x) => a + x.liters, 0); const km = f[f.length - 1].km - f[0].km, h = f[f.length - 1].hours - f[0].hours; return { per100: km > 0 ? L / km * 100 : 0, perH: h > 0 ? L / h : 0 }; }
+
+function vehForm(id) {
+  const v = id ? S.vehicles.find(x => x.id === id) : { name: '', type: 'enduro', brand: '', model: '', year: new Date().getFullYear(), hours: 0, km: 0, vin: '', reg: '', regExpiry: '', insExpiry: '', notes: '', specs: [] };
+  if (!requirePerm(id ? 'edit' : 'add')) return;
+  openModal(`${modalHead(id ? v.name : 'Novo vozilo', 'fleet')}
+    <div class="f2"><div><label class="f">${t('name')} *</label><input id="v-name" value="${esc(v.name)}"></div><div><label class="f">Tip</label><select id="v-type"><option value="enduro" ${v.type === 'enduro' ? 'selected' : ''}>Enduro motor</option><option value="utv" ${v.type === 'utv' ? 'selected' : ''}>UTV / buggy</option><option value="other" ${v.type === 'other' ? 'selected' : ''}>Ostalo</option></select></div></div>
+    <div class="f3"><div><label class="f">Marka</label><input id="v-brand" value="${esc(v.brand)}"></div><div><label class="f">Model</label><input id="v-model" value="${esc(v.model)}"></div><div><label class="f">Godište</label><input id="v-year" type="number" value="${v.year}"></div></div>
+    <div class="f2"><div><label class="f">Radni sati</label><input id="v-hours" type="number" step="0.1" value="${v.hours}"></div><div><label class="f">Km</label><input id="v-km" type="number" value="${v.km}"></div></div>
+    <div class="f2"><div><label class="f">VIN / šasija</label><input id="v-vin" value="${esc(v.vin)}"></div><div><label class="f">${t('registration')}</label><input id="v-reg" value="${esc(v.reg)}"></div></div>
+    <div class="f2"><div><label class="f">${t('registration')} ${t('expires')}</label><input id="v-regx" type="date" value="${v.regExpiry || ''}"></div><div><label class="f">${t('insurance')} ${t('expires')}</label><input id="v-insx" type="date" value="${v.insExpiry || ''}"></div></div>
+    <label class="f">${t('specs')} (jedna po liniji: Naziv | Vrednost)</label><textarea id="v-specs" style="min-height:90px;font-family:var(--mono);font-size:12px">${(v.specs || []).map(s => s[0] + ' | ' + s[1]).join('\n')}</textarea>
+    <label class="f">${t('notes')}</label><textarea id="v-notes">${esc(v.notes)}</textarea>
+    ${!id ? `<label class="f">Šablon intervala</label><select id="v-tpl"><option value="">Prazno (dodaj ručno)</option><option value="sherco">Enduro 4T (Sherco šablon)</option><option value="polaris">UTV (Polaris šablon)</option></select>` : ''}
+    <div class="actions">${id ? `<button class="btn danger" data-act="delVeh" data-id="${id}">${ic('trash')} ${t('delete')}</button>` : ''}<button class="btn ghost" data-act="closeModal">${t('cancel')}</button><button class="btn primary" id="v-save">${ic('check')} ${t('save')}</button></div>`);
+  $('#v-save').onclick = () => {
+    if (!validate(['v-name'])) return;
+    const data = { name: formVal('v-name').trim(), type: formVal('v-type'), brand: formVal('v-brand'), model: formVal('v-model'), year: num('v-year'), hours: num('v-hours'), km: num('v-km'), vin: formVal('v-vin'), reg: formVal('v-reg'), regExpiry: formVal('v-regx'), insExpiry: formVal('v-insx'), notes: formVal('v-notes'), specs: formVal('v-specs').split('\n').map(l => l.split('|').map(x => x.trim())).filter(l => l[0] && l[1]) };
+    mutate(s => { if (id) Object.assign(s.vehicles.find(x => x.id === id), data); else { const tpl = formVal('v-tpl'); const nv = { id: uid(), services: tpl === 'sherco' ? shercoServices() : tpl === 'polaris' ? polarisServices() : [], ...data }; nv.services.forEach(x => { x.lastH = nv.hours; x.lastKm = nv.km; x.lastDate = today(); }); s.vehicles.push(nv); fleetVid = nv.id; } }, (id ? 'izmenio vozilo ' : 'dodao vozilo ') + data.name);
+    closeModal();
+  };
+}
+function delVeh(id) { confirmBox(t('confirm_delete') + ' Brišu se i servisi, vožnje, gorivo i delovi.', () => { mutate(s => { s.vehicles = s.vehicles.filter(v => v.id !== id); ['services', 'trips', 'fuel', 'parts', 'checklists'].forEach(k => s[k] = s[k].filter(x => x.vehicleId !== id)); }, 'obrisao vozilo'); fleetVid = null; closeModal(); }); }
+
+function svcItemForm(vid, sid) {
+  const v = S.vehicles.find(x => x.id === vid); const s = sid ? v.services.find(x => x.id === sid) : { name: '', intH: 20, intKm: null, intM: null, kind: 'replace', note: '', lastH: v.hours, lastKm: v.km, lastDate: today() };
+  if (!requirePerm('edit')) return; const st = sid ? svcStatus(v, s) : null;
+  openModal(`${modalHead(sid ? s.name : 'Nova stavka održavanja', 'service')}
+    ${st ? `<div class="chips" style="margin-bottom:6px"><span class="tag ${st.level}">${n0(clamp(st.pct, 0, 9.99) * 100)}% ${t('wear')}</span><span class="tag dim">${st.rem < 0 ? 'KASNI ' : 'još '}${esc(st.text)}</span></div>` : ''}
+    <label class="f">${t('name')} *</label><input id="s-name" value="${esc(s.name)}">
+    <div class="f3"><div><label class="f">Interval (h)</label><input id="s-intH" type="number" step="1" value="${s.intH ?? ''}"></div><div><label class="f">Interval (km)</label><input id="s-intKm" type="number" value="${s.intKm ?? ''}"></div><div><label class="f">Interval (meseci)</label><input id="s-intM" type="number" value="${s.intM ?? ''}"></div></div>
+    <div class="f3"><div><label class="f">Poslednji put (h)</label><input id="s-lastH" type="number" step="0.1" value="${s.lastH}"></div><div><label class="f">Poslednji put (km)</label><input id="s-lastKm" type="number" value="${s.lastKm}"></div><div><label class="f">Poslednji datum</label><input id="s-lastDate" type="date" value="${s.lastDate || ''}"></div></div>
+    <div class="f2"><div><label class="f">Vrsta</label><select id="s-kind"><option value="replace" ${s.kind === 'replace' ? 'selected' : ''}>Zamena</option><option value="inspect" ${s.kind === 'inspect' ? 'selected' : ''}>Kontrola</option></select></div><div><label class="f">${t('notes')}</label><input id="s-note" value="${esc(s.note)}"></div></div>
+    <div class="actions">${sid ? `<button class="btn danger" id="s-del">${ic('trash')}</button><button class="btn amber" data-act="svcForm" data-id="${vid}" data-item="${sid}">${ic('check')} Upiši kao urađeno</button>` : ''}<button class="btn ghost" data-act="closeModal">${t('cancel')}</button><button class="btn primary" id="s-save">${t('save')}</button></div>`);
+  $('#s-save').onclick = () => {
+    if (!validate(['s-name'])) return; const g = id => { const x = parseFloat(formVal(id)); return isNaN(x) || x <= 0 ? null : x; };
+    const data = { name: formVal('s-name').trim(), intH: g('s-intH'), intKm: g('s-intKm'), intM: g('s-intM'), lastH: num('s-lastH'), lastKm: num('s-lastKm'), lastDate: formVal('s-lastDate'), kind: formVal('s-kind'), note: formVal('s-note') };
+    if (!data.intH && !data.intKm && !data.intM) { toast('Unesi bar jedan interval', true); return; }
+    mutate(st => { const vv = st.vehicles.find(x => x.id === vid); if (sid) Object.assign(vv.services.find(x => x.id === sid), data); else vv.services.push({ id: uid(), ...data }); }, (sid ? 'izmenio interval ' : 'dodao interval ') + data.name + ' – ' + v.name, { silent: true });
+    closeModal();
+  };
+  if (sid) $('#s-del').onclick = () => confirmBox(t('confirm_delete'), () => { mutate(st => { const vv = st.vehicles.find(x => x.id === vid); vv.services = vv.services.filter(x => x.id !== sid); }, 'obrisao interval'); closeModal(); });
+}
+
+/* ---------- SERVISNA KNJIŽICA ---------- */
+let svcFilterVid = '';
+function renderService() {
+  const list = S.services.filter(s => !svcFilterVid || s.vehicleId === svcFilterVid).sort((a, b) => b.date.localeCompare(a.date));
+  $('#v-service').innerHTML = `<div class="vhead"><h1>${t('nav_service')}<small>SERVICE LOG · ${list.length} RECORDS · ${money(list.reduce((a, s) => a + (s.cost || 0), 0))}</small></h1>
+    <div class="tools"><select id="svcVid" style="width:auto"><option value="">${t('all_vehicles')}</option>${S.vehicles.map(v => `<option value="${v.id}" ${svcFilterVid === v.id ? 'selected' : ''}>${esc(v.name)}</option>`).join('')}</select><button class="btn sm" data-act="printService">${ic('down')} ${t('print_pdf')}</button><button class="btn sm" data-act="csvService">${t('export_csv')}</button><button class="btn sm primary" data-act="svcForm">${ic('plus')} ${t('add_service')}</button></div></div>
+    <div class="card"><div class="tscroll"><table><tr><th>${t('date')}</th><th>${t('vehicle')}</th><th class="num">h</th><th class="num">km</th><th>Urađeno</th><th>Delovi</th><th>Ko</th><th class="num">${t('cost')}</th><th></th></tr>
+      ${list.map(s => `<tr class="clickable" data-act="svcDetail" data-id="${s.id}"><td class="mono">${fmtD(s.date)}</td><td>${esc(vname(s.vehicleId))}</td><td class="num">${n1(s.hours)}</td><td class="num">${n0(s.km)}</td><td><b>${esc(s.desc)}</b><br><small class="muted">${(s.items || []).map(esc).join(' · ')}</small></td><td><small>${esc(s.parts)}</small></td><td><small>${esc(s.who)}</small></td><td class="num">${money(s.cost)}</td><td>${s.photo ? ic('camera') : ''}</td></tr>`).join('') || `<tr><td colspan="9" class="empty">Nema zapisa</td></tr>`}</table></div></div>`;
+  $('#svcVid').onchange = e => { svcFilterVid = e.target.value; renderService(); };
+}
+function svcDetail(id) {
+  const s = S.services.find(x => x.id === id);
+  openModal(`${modalHead(fmtD(s.date) + ' – ' + vname(s.vehicleId), 'service')}<div class="chips"><span class="tag info">${n1(s.hours)} h</span><span class="tag info">${n0(s.km)} km</span><span class="tag dim">${esc(s.who)}</span><span class="tag warn">${money(s.cost)}</span></div>
+    <p><b>${esc(s.desc)}</b></p><div class="chips">${(s.items || []).map(i => `<span class="tag ok">${esc(i)}</span>`).join('')}</div><p class="muted">Delovi: ${esc(s.parts) || '—'}</p>${s.photo ? `<img src="${s.photo}" style="max-width:100%;border-radius:8px">` : ''}
+    <div class="actions">${can('delete', s.authorId) ? `<button class="btn danger" id="sd-del">${ic('trash')} ${t('delete')}</button>` : ''}<button class="btn" data-act="svcForm" data-id="${s.vehicleId}" data-edit="${id}">${ic('edit')} ${t('edit')}</button></div>`);
+  const d = $('#sd-del'); if (d) d.onclick = () => confirmBox(t('confirm_delete'), () => { mutate(st => st.services = st.services.filter(x => x.id !== id), 'obrisao servisni zapis'); closeModal(); });
+}
+function svcForm(vid, preItem, editId) {
+  const ed = editId ? S.services.find(x => x.id === editId) : null; vid = ed ? ed.vehicleId : (vid || curVeh()?.id); const v = S.vehicles.find(x => x.id === vid); if (!v) { toast('Nema vozila', true); return; }
+  if (!requirePerm(ed ? 'edit' : 'add', ed?.authorId)) return;
+  const sel = ed ? ed.items : preItem ? [v.services.find(x => x.id === preItem)?.name] : [];
+  const draw = () => `<div class="f2"><div><label class="f">${t('vehicle')}</label><select id="sv-vid">${S.vehicles.map(x => `<option value="${x.id}" ${x.id === vid ? 'selected' : ''}>${esc(x.name)}</option>`).join('')}</select></div><div><label class="f">${t('date')}</label><input id="sv-date" type="date" value="${ed?.date || today()}"></div></div>
+    <div class="f2"><div><label class="f">Stanje sata (h)</label><input id="sv-h" type="number" step="0.1" value="${ed?.hours ?? v.hours}"></div><div><label class="f">Km</label><input id="sv-km" type="number" value="${ed?.km ?? v.km}"></div></div>
+    <label class="f">Šta je urađeno (resetuje brojače)</label><div style="max-height:180px;overflow:auto;border:1px solid var(--line2);border-radius:8px;padding:4px 10px" id="sv-items">${v.services.map(s => { const st = svcStatus(v, s); return `<label class="chk"><input type="checkbox" value="${esc(s.name)}" ${sel.includes(s.name) ? 'checked' : ''}><span style="flex:1">${esc(s.name)}</span><span class="tag ${st.level}">${n0(clamp(st.pct, 0, 9.99) * 100)}%</span></label>`; }).join('')}</div>
+    <label class="f">${t('description')} *</label><input id="sv-desc" value="${esc(ed?.desc || '')}">
+    <div class="f3"><div><label class="f">Delovi / materijal</label><input id="sv-parts" value="${esc(ed?.parts || '')}"></div><div><label class="f">${t('cost')} (RSD)</label><input id="sv-cost" type="number" value="${ed?.cost ?? ''}"></div><div><label class="f">Ko je radio</label><input id="sv-who" value="${esc(ed?.who || me().name)}"></div></div>
+    <label class="f">Fotografija / račun</label><div class="chips"><label class="btn sm" style="cursor:pointer">${ic('camera')} Upload<input type="file" accept="image/*" class="hidden" id="sv-file"></label><span id="sv-photo-st" class="muted">${ed?.photo ? 'slika učitana' : ''}</span></div>`;
+  openModal(`${modalHead(ed ? t('edit') : t('add_service'), 'service')}${draw()}<div class="actions"><button class="btn ghost" data-act="closeModal">${t('cancel')}</button><button class="btn primary" id="sv-save">${ic('check')} ${t('save')}</button></div>`);
+  let photo = ed?.photo || ''; $('#sv-file').onchange = async e => { photo = await readFileAsDataURL(e.target.files[0], 1000); $('#sv-photo-st').textContent = 'slika učitana'; };
+  $('#sv-vid').onchange = () => { closeModal(); svcForm($('#sv-vid').value); };
+  $('#sv-save').onclick = () => {
+    if (!validate(['sv-desc'])) return; const items = $$('#sv-items input:checked').map(i => i.value);
+    const rec = { id: ed?.id || uid(), vehicleId: vid, date: formVal('sv-date'), hours: num('sv-h'), km: num('sv-km'), items, desc: formVal('sv-desc').trim(), parts: formVal('sv-parts'), cost: num('sv-cost'), who: formVal('sv-who'), photo, authorId: ed?.authorId || me().id };
+    mutate(s => {
+      const vv = s.vehicles.find(x => x.id === vid); if (ed) Object.assign(s.services.find(x => x.id === ed.id), rec); else s.services.push(rec);
+      if (rec.hours > vv.hours) vv.hours = rec.hours; if (rec.km > vv.km) vv.km = rec.km;
+      items.forEach(nm => { const it = vv.services.find(x => x.name === nm); if (it && (!it.lastDate || rec.date >= it.lastDate)) { it.lastH = rec.hours; it.lastKm = rec.km; it.lastDate = rec.date; } });
+    }, `upisao servis ${v.name}: ${rec.desc}`);
+    closeModal();
+  };
+}
+function printService() {
+  const list = S.services.filter(s => !svcFilterVid || s.vehicleId === svcFilterVid).sort((a, b) => a.date.localeCompare(b.date));
+  $('#printArea').innerHTML = `<h1>TRAILCOMMAND – Servisna knjižica</h1><p>Generisano ${fmtD(today())} · ${me().name}</p>` + S.vehicles.filter(v => !svcFilterVid || v.id === svcFilterVid).map(v => `<h2>${esc(v.name)} – ${esc(v.brand)} ${esc(v.model)} ${v.year} · VIN ${esc(v.vin)} · ${n1(v.hours)} h · ${n0(v.km)} km</h2>
+    <table><tr><th>Datum</th><th>h</th><th>km</th><th>Opis</th><th>Stavke</th><th>Delovi</th><th>Ko</th><th>Cena</th></tr>${list.filter(s => s.vehicleId === v.id).map(s => `<tr><td>${fmtD(s.date)}</td><td>${n1(s.hours)}</td><td>${n0(s.km)}</td><td>${esc(s.desc)}</td><td>${(s.items || []).map(esc).join(', ')}</td><td>${esc(s.parts)}</td><td>${esc(s.who)}</td><td>${money(s.cost)}</td></tr>`).join('')}</table>
+    <h2>Trenutno stanje intervala</h2><table><tr><th>Stavka</th><th>Interval</th><th>Poslednji put</th><th>Istrošenost</th><th>Preostalo</th></tr>${v.services.map(s => { const st = svcStatus(v, s); return `<tr><td>${esc(s.name)}</td><td>${[s.intH && s.intH + ' h', s.intKm && s.intKm + ' km', s.intM && s.intM + ' mes.'].filter(Boolean).join(' / ')}</td><td>${n1(s.lastH)} h · ${n0(s.lastKm)} km · ${fmtD(s.lastDate)}</td><td>${n0(clamp(st.pct, 0, 9.99) * 100)}%</td><td>${st.rem < 0 ? 'KASNI ' : ''}${st.text}</td></tr>`; }).join('')}</table>`).join('');
+  setTimeout(() => window.print(), 100);
+}
+function csvService() { download('servisna-knjizica.csv', '﻿' + csv([['Datum', 'Vozilo', 'Sati', 'Km', 'Opis', 'Stavke', 'Delovi', 'Ko', 'Cena'], ...S.services.map(s => [s.date, vname(s.vehicleId), s.hours, s.km, s.desc, (s.items || []).join(', '), s.parts, s.who, s.cost])]), 'text/csv'); }
+
+/* ---------- VOŽNJE ---------- */
+function renderTrips() {
+  const list = S.trips.slice().sort((a, b) => b.date.localeCompare(a.date));
+  $('#v-trips').innerHTML = `<div class="vhead"><h1>${t('nav_trips')}<small>TRIP LOG · ${list.length} · ${n1(list.reduce((a, x) => a + x.hours, 0))} h · ${U.dist(list.reduce((a, x) => a + x.km, 0))}</small></h1><div class="tools"><button class="btn sm" data-act="csvTrips">${t('export_csv')}</button><button class="btn sm primary" data-act="tripForm">${ic('plus')} ${t('add_trip')}</button></div></div>
+    <div class="card"><div class="tscroll"><table><tr><th>${t('date')}</th><th>${t('vehicle')}</th><th>Lokacija</th><th class="num">h</th><th class="num">km</th><th>Uslovi</th><th class="num">Gorivo</th><th>${t('notes')}</th></tr>
+    ${list.map(x => `<tr class="clickable" data-act="tripForm" data-edit="${x.id}"><td class="mono">${fmtD(x.date)}</td><td>${esc(vname(x.vehicleId))}</td><td>${esc(pname(x.poiId))}</td><td class="num">${n1(x.hours)}</td><td class="num">${n0(x.km)}</td><td><div class="chips">${(x.conditions || []).map(c => `<span class="tag dim">${t('cond_' + c)}</span>`).join('')}</div></td><td class="num">${x.fuelL ? n1(x.fuelL) + ' L' : '—'}</td><td><small>${esc(x.notes)}</small></td></tr>`).join('') || `<tr><td colspan="8" class="empty">Nema vožnji</td></tr>`}</table></div></div>`;
+}
+function tripForm(vid, editId, poiId) {
+  const ed = editId ? S.trips.find(x => x.id === editId) : null; vid = ed?.vehicleId || vid || curVeh()?.id; const v = S.vehicles.find(x => x.id === vid); if (!v) return; if (!requirePerm(ed ? 'edit' : 'add', ed?.authorId)) return;
+  const conds = ed?.conditions || [];
+  openModal(`${modalHead(ed ? t('edit') : t('add_trip'), 'trips')}
+    <div class="f2"><div><label class="f">${t('vehicle')}</label><select id="tr-vid">${S.vehicles.map(x => `<option value="${x.id}" ${x.id === vid ? 'selected' : ''}>${esc(x.name)}</option>`).join('')}</select></div><div><label class="f">${t('date')}</label><input id="tr-date" type="date" value="${ed?.date || today()}"></div></div>
+    <label class="f">Lokacija (tačka sa mape)</label><select id="tr-poi"><option value="">—</option>${S.pois.slice().sort((a, b) => a.name.localeCompare(b.name)).map(p => `<option value="${p.id}" ${(ed?.poiId || poiId) === p.id ? 'selected' : ''}>${esc(p.name)}</option>`).join('')}</select>
+    <div class="f3"><div><label class="f">Trajanje (h) *</label><input id="tr-h" type="number" step="0.1" inputmode="decimal" value="${ed?.hours ?? ''}"></div><div><label class="f">Km</label><input id="tr-km" type="number" inputmode="decimal" value="${ed?.km ?? ''}"></div><div><label class="f">Gorivo (L)</label><input id="tr-fuel" type="number" step="0.1" value="${ed?.fuelL ?? ''}"></div></div>
+    <label class="f">Uslovi</label><div class="chips" id="tr-conds">${CONDS.map(c => `<button class="chip ${conds.includes(c) ? 'on' : ''}" data-v="${c}">${t('cond_' + c)}</button>`).join('')}</div>
+    <label class="f">${t('notes')}</label><textarea id="tr-notes">${esc(ed?.notes || '')}</textarea>
+    <div class="actions">${ed ? `<button class="btn danger" id="tr-del">${ic('trash')}</button>` : ''}<button class="btn ghost" data-act="closeModal">${t('cancel')}</button><button class="btn primary" id="tr-save">${ic('check')} ${t('save')}</button></div>`);
+  $('#tr-conds').onclick = e => { const b = e.target.closest('.chip'); if (b) b.classList.toggle('on'); };
+  $('#tr-save').onclick = () => {
+    if (!validate(['tr-h'])) return; const nv = formVal('tr-vid');
+    const rec = { id: ed?.id || uid(), vehicleId: nv, date: formVal('tr-date'), poiId: formVal('tr-poi'), hours: num('tr-h'), km: num('tr-km'), conditions: $$('#tr-conds .chip.on').map(c => c.dataset.v), notes: formVal('tr-notes'), fuelL: num('tr-fuel'), authorId: ed?.authorId || me().id };
+    mutate(s => {
+      if (ed) { const ov = s.vehicles.find(x => x.id === ed.vehicleId); if (ov) { ov.hours = Math.max(0, +(ov.hours - ed.hours).toFixed(1)); ov.km = Math.max(0, ov.km - ed.km); } Object.assign(s.trips.find(x => x.id === ed.id), rec); }
+      else s.trips.push(rec);
+      const vv = s.vehicles.find(x => x.id === nv); vv.hours = +(vv.hours + rec.hours).toFixed(1); vv.km += rec.km;
+    }, `upisao vožnju ${vname(nv)} – ${pname(rec.poiId)} ${n1(rec.hours)} h`);
+    closeModal(); checkOverdueToast(nv);
+  };
+  if (ed) $('#tr-del').onclick = () => confirmBox(t('confirm_delete'), () => { mutate(s => { const vv = s.vehicles.find(x => x.id === ed.vehicleId); if (vv) { vv.hours = Math.max(0, +(vv.hours - ed.hours).toFixed(1)); vv.km = Math.max(0, vv.km - ed.km); } s.trips = s.trips.filter(x => x.id !== ed.id); }, 'obrisao vožnju'); closeModal(); });
+}
+function checkOverdueToast(vid) { const v = S.vehicles.find(x => x.id === vid); const bad = v.services.filter(s => svcStatus(v, s).level === 'bad'); if (bad.length) { toast(`⚠ ${v.name}: ${bad.length} prekoračenih intervala – ${bad[0].name}`, true); notify(`${v.name}: ${t('urgent')}`, bad.map(b => b.name).join(', ')); } }
+function csvTrips() { download('voznje.csv', '﻿' + csv([['Datum', 'Vozilo', 'Lokacija', 'Sati', 'Km', 'Uslovi', 'Gorivo L', 'Beleške'], ...S.trips.map(x => [x.date, vname(x.vehicleId), pname(x.poiId), x.hours, x.km, (x.conditions || []).join(','), x.fuelL, x.notes])]), 'text/csv'); }
+
+/* ---------- GORIVO ---------- */
+function renderFuel() {
+  const list = S.fuel.slice().sort((a, b) => b.date.localeCompare(a.date));
+  $('#v-fuel').innerHTML = `<div class="vhead"><h1>${t('nav_fuel')}<small>FUEL LOG · ${n1(list.reduce((a, x) => a + x.liters, 0))} L · ${money(list.reduce((a, x) => a + x.cost, 0))}</small></h1><div class="tools"><button class="btn sm primary" data-act="fuelForm">${ic('plus')} ${t('add_fuel')}</button></div></div>
+    <div class="grid g2" style="margin-bottom:14px">${S.vehicles.map(v => { const a = fuelAvg(v); const f = S.fuel.filter(x => x.vehicleId === v.id); return `<div class="card"><h3>${ic('fuel')} ${esc(v.name)}</h3><div class="grid g3" style="gap:8px"><div class="stat"><div class="lbl">L/100km</div><div class="val" style="font-size:22px">${a.per100 ? n1(a.per100) : '—'}</div></div><div class="stat"><div class="lbl">L/h</div><div class="val amber" style="font-size:22px">${a.perH ? n1(a.perH) : '—'}</div></div><div class="stat"><div class="lbl">RSD/L prosek</div><div class="val green" style="font-size:22px">${f.length ? n0(f.reduce((x, y) => x + y.cost, 0) / f.reduce((x, y) => x + y.liters, 0)) : '—'}</div></div></div></div>`; }).join('')}</div>
+    <div class="card"><div class="tscroll"><table><tr><th>${t('date')}</th><th>${t('vehicle')}</th><th class="num">Litara</th><th class="num">${t('cost')}</th><th class="num">RSD/L</th><th class="num">km</th><th class="num">h</th><th>Pun</th></tr>
+    ${list.map(x => `<tr class="clickable" data-act="fuelForm" data-edit="${x.id}"><td class="mono">${fmtD(x.date)}</td><td>${esc(vname(x.vehicleId))}</td><td class="num">${n1(x.liters)}</td><td class="num">${money(x.cost)}</td><td class="num">${x.liters ? n0(x.cost / x.liters) : '—'}</td><td class="num">${n0(x.km)}</td><td class="num">${n1(x.hours)}</td><td>${x.full ? ic('check') : ''}</td></tr>`).join('') || `<tr><td colspan="8" class="empty">Nema točenja</td></tr>`}</table></div></div>`;
+}
+function fuelForm(editId) {
+  const ed = editId ? S.fuel.find(x => x.id === editId) : null; const v = S.vehicles.find(x => x.id === (ed?.vehicleId || curVeh()?.id)); if (!v || !requirePerm(ed ? 'edit' : 'add', ed?.authorId)) return;
+  openModal(`${modalHead(t('add_fuel'), 'fuel')}<div class="f2"><div><label class="f">${t('vehicle')}</label><select id="fu-vid">${S.vehicles.map(x => `<option value="${x.id}" ${x.id === v.id ? 'selected' : ''}>${esc(x.name)}</option>`).join('')}</select></div><div><label class="f">${t('date')}</label><input id="fu-date" type="date" value="${ed?.date || today()}"></div></div>
+    <div class="f2"><div><label class="f">Litara *</label><input id="fu-l" type="number" step="0.1" value="${ed?.liters ?? ''}"></div><div><label class="f">${t('cost')} (RSD)</label><input id="fu-cost" type="number" value="${ed?.cost ?? ''}"></div></div>
+    <div class="f2"><div><label class="f">Stanje km</label><input id="fu-km" type="number" value="${ed?.km ?? v.km}"></div><div><label class="f">Stanje h</label><input id="fu-h" type="number" step="0.1" value="${ed?.hours ?? v.hours}"></div></div>
+    <label class="chk"><input type="checkbox" id="fu-full" ${ed ? (ed.full ? 'checked' : '') : 'checked'}> Pun rezervoar</label>
+    <div class="actions">${ed ? `<button class="btn danger" id="fu-del">${ic('trash')}</button>` : ''}<button class="btn ghost" data-act="closeModal">${t('cancel')}</button><button class="btn primary" id="fu-save">${t('save')}</button></div>`);
+  $('#fu-save').onclick = () => { if (!validate(['fu-l'])) return; const rec = { id: ed?.id || uid(), vehicleId: formVal('fu-vid'), date: formVal('fu-date'), liters: num('fu-l'), cost: num('fu-cost'), km: num('fu-km'), hours: num('fu-h'), full: formVal('fu-full'), authorId: ed?.authorId || me().id }; mutate(s => { if (ed) Object.assign(s.fuel.find(x => x.id === ed.id), rec); else s.fuel.push(rec); const vv = s.vehicles.find(x => x.id === rec.vehicleId); if (rec.km > vv.km) vv.km = rec.km; if (rec.hours > vv.hours) vv.hours = rec.hours; }, `upisao točenje ${n1(rec.liters)} L`); closeModal(); };
+  if (ed) $('#fu-del').onclick = () => confirmBox(t('confirm_delete'), () => { mutate(s => s.fuel = s.fuel.filter(x => x.id !== ed.id), 'obrisao točenje'); closeModal(); });
+}
+
+/* ---------- DELOVI ---------- */
+function renderParts() {
+  const list = S.parts.slice().sort((a, b) => (a.qty <= a.min ? 0 : 1) - (b.qty <= b.min ? 0 : 1));
+  $('#v-parts').innerHTML = `<div class="vhead"><h1>${t('nav_parts')}<small>INVENTORY · ${list.length} ITEMS · ${lowParts().length} LOW · ${money(list.reduce((a, p) => a + p.qty * p.price, 0))}</small></h1><div class="tools"><button class="btn sm primary" data-act="partForm">${ic('plus')} ${t('add')}</button></div></div>
+    <div class="card"><div class="tscroll"><table><tr><th>Deo</th><th>Kat. broj</th><th>${t('vehicle')}</th><th class="num">Kol.</th><th class="num">Min</th><th class="num">Cena</th><th>Status</th><th></th></tr>
+    ${list.map(p => `<tr><td><b>${esc(p.name)}</b></td><td class="mono">${esc(p.partNo)}</td><td>${esc(vname(p.vehicleId))}</td><td class="num">${p.qty}</td><td class="num">${p.min}</td><td class="num">${money(p.price)}</td><td>${p.qty <= p.min ? `<span class="tag ${p.qty === 0 ? 'bad' : 'warn'}">${p.qty === 0 ? 'NEMA' : 'MANJAK'}</span>` : '<span class="tag ok">OK</span>'}</td><td style="white-space:nowrap"><button class="btn xs" data-act="partQty" data-id="${p.id}" data-d="-1">−</button> <button class="btn xs" data-act="partQty" data-id="${p.id}" data-d="1">+</button> <button class="btn xs ghost" data-act="partForm" data-id="${p.id}">${ic('edit')}</button></td></tr>`).join('') || `<tr><td colspan="8" class="empty">Prazan inventar</td></tr>`}</table></div></div>`;
+}
+function partForm(id) {
+  const p = id ? S.parts.find(x => x.id === id) : { vehicleId: curVeh()?.id, name: '', partNo: '', qty: 1, min: 1, price: 0 }; if (!requirePerm(id ? 'edit' : 'add')) return;
+  openModal(`${modalHead(id ? p.name : 'Novi deo', 'parts')}<label class="f">${t('name')} *</label><input id="pt-name" value="${esc(p.name)}"><div class="f2"><div><label class="f">Kataloški broj</label><input id="pt-no" value="${esc(p.partNo)}"></div><div><label class="f">${t('vehicle')}</label><select id="pt-vid">${S.vehicles.map(x => `<option value="${x.id}" ${x.id === p.vehicleId ? 'selected' : ''}>${esc(x.name)}</option>`).join('')}</select></div></div>
+    <div class="f3"><div><label class="f">Količina</label><input id="pt-qty" type="number" value="${p.qty}"></div><div><label class="f">Minimum</label><input id="pt-min" type="number" value="${p.min}"></div><div><label class="f">Cena (RSD)</label><input id="pt-price" type="number" value="${p.price}"></div></div>
+    <div class="actions">${id ? `<button class="btn danger" id="pt-del">${ic('trash')}</button>` : ''}<button class="btn ghost" data-act="closeModal">${t('cancel')}</button><button class="btn primary" id="pt-save">${t('save')}</button></div>`);
+  $('#pt-save').onclick = () => { if (!validate(['pt-name'])) return; const rec = { name: formVal('pt-name').trim(), partNo: formVal('pt-no'), vehicleId: formVal('pt-vid'), qty: num('pt-qty'), min: num('pt-min'), price: num('pt-price') }; mutate(s => { if (id) Object.assign(s.parts.find(x => x.id === id), rec); else s.parts.push({ id: uid(), ...rec }); }, (id ? 'izmenio deo ' : 'dodao deo ') + rec.name, { silent: true }); closeModal(); };
+  if (id) $('#pt-del').onclick = () => confirmBox(t('confirm_delete'), () => { mutate(s => s.parts = s.parts.filter(x => x.id !== id), 'obrisao deo'); closeModal(); });
+}
+
+/* ---------- TROŠKOVI ---------- */
+function costRows() { const rows = []; S.services.forEach(s => rows.push({ date: s.date, vehicleId: s.vehicleId, cat: 'Servis', amt: s.cost || 0 })); S.fuel.forEach(f => rows.push({ date: f.date, vehicleId: f.vehicleId, cat: 'Gorivo', amt: f.cost || 0 })); return rows; }
+function renderCosts() {
+  const rows = costRows(); const months = [...new Set(rows.map(r => monthKey(r.date)))].sort().slice(-12); const total = rows.reduce((a, r) => a + r.amt, 0);
+  $('#v-costs').innerHTML = `<div class="vhead"><h1>${t('nav_costs')}<small>TOTAL ${money(total)} · ${months.length} MONTHS</small></h1><div class="tools"><button class="btn sm" data-act="csvCosts">${t('export_csv')}</button></div></div>
+    <div class="grid g3">${S.vehicles.map(v => { const r = rows.filter(x => x.vehicleId === v.id); const sv = r.filter(x => x.cat === 'Servis').reduce((a, x) => a + x.amt, 0), fu = r.filter(x => x.cat === 'Gorivo').reduce((a, x) => a + x.amt, 0); return `<div class="card stat"><div class="lbl">${esc(v.name)}</div><div class="val" style="font-size:24px" data-count="${sv + fu}">0</div><div class="sub">Servis ${money(sv)} · Gorivo ${money(fu)} · ${v.hours ? money((sv + fu) / v.hours) + '/h' : ''}</div></div>`; }).join('')}</div>
+    <div class="grid g2" style="margin-top:14px"><div class="card"><h3>${t('per_month')}</h3><div style="height:260px"><canvas class="chart" id="costMonth"></canvas></div></div><div class="card"><h3>${t('per_vehicle')}</h3><div style="height:260px"><canvas class="chart" id="costVeh"></canvas></div></div></div>
+    <div class="card" style="margin-top:14px"><div class="tscroll"><table><tr><th>Mesec</th>${S.vehicles.map(v => `<th class="num">${esc(v.name)}</th>`).join('')}<th class="num">${t('total')}</th></tr>${months.slice().reverse().map(m => `<tr><td class="mono">${m}</td>${S.vehicles.map(v => `<td class="num">${money(rows.filter(r => monthKey(r.date) === m && r.vehicleId === v.id).reduce((a, r) => a + r.amt, 0))}</td>`).join('')}<td class="num"><b>${money(rows.filter(r => monthKey(r.date) === m).reduce((a, r) => a + r.amt, 0))}</b></td></tr>`).join('')}</table></div></div>`;
+  animateCounters($('#v-costs'));
+  if (typeof Chart === 'undefined') return;
+  const colors = ['#00e5ff', '#ffb020', '#b388ff', '#2ee6a6'];
+  new Chart($('#costMonth'), { type: 'bar', data: { labels: months, datasets: S.vehicles.map((v, i) => ({ label: v.name, data: months.map(m => rows.filter(r => monthKey(r.date) === m && r.vehicleId === v.id).reduce((a, r) => a + r.amt, 0)), backgroundColor: colors[i % 4] + 'cc', borderRadius: 4 })) }, options: { ...chartOpts({ legend: true, zero: true }), scales: { x: { stacked: true, ticks: { color: '#8b98a8' } }, y: { stacked: true, ticks: { color: '#8b98a8' } } } } });
+  new Chart($('#costVeh'), { type: 'doughnut', data: { labels: S.vehicles.flatMap(v => [v.name + ' – servis', v.name + ' – gorivo']), datasets: [{ data: S.vehicles.flatMap(v => ['Servis', 'Gorivo'].map(c => rows.filter(r => r.vehicleId === v.id && r.cat === c).reduce((a, r) => a + r.amt, 0))), backgroundColor: ['#00e5ff', '#00e5ff77', '#ffb020', '#ffb02077', '#b388ff', '#b388ff77'], borderColor: '#0b0f14' }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { color: '#8b98a8', boxWidth: 10, font: { size: 10 } } } } } });
+}
+function csvCosts() { download('troskovi.csv', '﻿' + csv([['Datum', 'Vozilo', 'Kategorija', 'Iznos'], ...costRows().sort((a, b) => a.date.localeCompare(b.date)).map(r => [r.date, vname(r.vehicleId), r.cat, r.amt])]), 'text/csv'); }
+
+/* ---------- notifikacije ---------- */
+function notify(title, body) { try { if (S.settings.notif && 'Notification' in window && Notification.permission === 'granted') new Notification(title, { body, icon: faviconData() }); } catch (e) { } }
+function notifyOverdueOnLoad() { const al = fleetAlerts(); if (al.bad) notify(`TRAILCOMMAND: ${al.bad} ${t('overdue_items').toLowerCase()}`, S.vehicles.flatMap(v => v.services.filter(s => svcStatus(v, s).level === 'bad').map(s => v.name + ': ' + s.name)).slice(0, 4).join('\n')); }
+function faviconData() { return 'data:image/svg+xml,' + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="12" fill="#0b0f14"/><path d="M10 44l10-22 10 15 7-10 11 17" stroke="#00e5ff" stroke-width="4" fill="none" stroke-linecap="round" stroke-linejoin="round"/><circle cx="48" cy="16" r="5" fill="#ffb020"/></svg>`); }
+</script>
+<script>
+/* ================================================================== */
+/*  DODATNI MODULI – checklist, planer, SOS, analitika, tim, settings */
+/* ================================================================== */
+
+/* ---------- PRE-RIDE CHECKLIST ---------- */
+const CHECK_TPL = {
+  enduro: ['Nivo ulja u motoru', 'Nivo rashladne tečnosti', 'Pritisak guma (0,9 bar)', 'Lanac – zategnutost i podmazivanje', 'Kočnice – pedala i ručica', 'Kvačilo – luft', 'Svetla i prekidači', 'Zavrtnji točkova / osovine', 'Vazdušni filter čist', 'Gorivo – pun rezervoar', 'Zaštitna oprema (kaciga, čizme, štitnici)', 'Alat i rezervna guma / lepak', 'Voda i hrana', 'Telefon pun + GPS'],
+  utv: ['Nivo ulja u motoru', 'Rashladna tečnost', 'Pritisak guma (14 psi)', 'CVT kaiš – vizuelna kontrola', 'Kočnice', 'Volan – luft', 'Svetla i sirena', 'Sigurnosni pojasevi', 'Matice točkova', 'Vitlo / sajla funkcioniše', 'Gorivo – pun rezervoar + rezerva', 'Prva pomoć i aparat za gašenje', 'Radio / telefon', 'Dozvole / dokumenta'],
+};
+let checkVid = null;
+function renderChecklist() {
+  const v = S.vehicles.find(x => x.id === checkVid) || S.vehicles[0]; if (!v) { $('#v-checklist').innerHTML = '<div class="empty">Dodaj vozilo.</div>'; return; } checkVid = v.id;
+  const hist = S.checklists.filter(c => c.vehicleId === v.id).sort((a, b) => b.date.localeCompare(a.date));
+  const tpl = CHECK_TPL[v.type] || CHECK_TPL.enduro;
+  $('#v-checklist').innerHTML = `<div class="vhead"><h1>${t('nav_checklist')}<small>PRE-RIDE INSPECTION · ${esc(v.name)}</small></h1></div>
+    <div class="vsel">${S.vehicles.map(x => `<button class="${x.id === v.id ? 'active' : ''}" data-act="selCheckVeh" data-id="${x.id}">${ic(x.type === 'utv' ? 'buggy' : 'moto')}${esc(x.name)}</button>`).join('')}</div>
+    <div class="grid g2"><div class="card"><h3>${ic('checklist')} Lista <span class="r"><span class="tag info" id="ckProg">0/${tpl.length}</span></span></h3><div id="ckItems">${tpl.map((it, i) => `<label class="chk"><input type="checkbox" data-i="${i}"><span>${esc(it)}</span></label>`).join('')}</div>
+      <label class="f">Potpis (crtaj prstom)</label><canvas class="sig" id="sigPad"></canvas><div class="chips" style="margin-top:6px"><button class="btn xs ghost" id="sigClear">Obriši potpis</button><span class="muted" style="font-size:11px">${me().name} · ${fmtD(today())}</span></div>
+      <label class="f">${t('notes')}</label><input id="ckNotes"><button class="btn primary full" id="ckSave" style="margin-top:12px">${ic('check')} Potvrdi i sačuvaj</button></div>
+    <div class="card"><h3>Istorija (${hist.length})</h3>${hist.slice(0, 15).map(c => `<div class="li"><span class="tag ${c.items.every(i => i.ok) ? 'ok' : 'warn'}">${c.items.filter(i => i.ok).length}/${c.items.length}</span><div class="t"><b>${fmtD(c.date)} – ${esc(c.user)}</b><small>${esc(c.notes) || (c.items.filter(i => !i.ok).map(i => i.t).join(', ') || 'sve OK')}</small></div>${c.sig ? `<img src="${c.sig}" style="height:30px;background:#fff;border-radius:4px">` : ''}</div>`).join('') || '<div class="empty">Nema sačuvanih lista</div>'}</div></div>`;
+  const prog = () => $('#ckProg').textContent = $$('#ckItems input:checked').length + '/' + tpl.length; $('#ckItems').onchange = prog;
+  const cv = $('#sigPad'); cv.width = cv.offsetWidth * 2; cv.height = 240; const ctx = cv.getContext('2d'); ctx.strokeStyle = '#00e5ff'; ctx.lineWidth = 3; ctx.lineCap = 'round'; let drawing = false, signed = false;
+  const pos = e => { const r = cv.getBoundingClientRect(); const p = e.touches ? e.touches[0] : e; return [(p.clientX - r.left) * 2, (p.clientY - r.top) * 2]; };
+  const st = e => { drawing = true; signed = true; ctx.beginPath(); ctx.moveTo(...pos(e)); e.preventDefault(); }; const mv = e => { if (!drawing) return; ctx.lineTo(...pos(e)); ctx.stroke(); e.preventDefault(); }; const en = () => drawing = false;
+  cv.onmousedown = st; cv.onmousemove = mv; cv.onmouseup = en; cv.onmouseleave = en; cv.ontouchstart = st; cv.ontouchmove = mv; cv.ontouchend = en;
+  $('#sigClear').onclick = () => { ctx.clearRect(0, 0, cv.width, cv.height); signed = false; };
+  $('#ckSave').onclick = () => { const items = tpl.map((tt, i) => ({ t: tt, ok: $(`#ckItems input[data-i="${i}"]`).checked })); if (!signed) { toast('Potpiši listu', true); return; } mutate(s => s.checklists.push({ id: uid(), vehicleId: v.id, date: today(), user: me().name, items, notes: formVal('ckNotes'), sig: cv.toDataURL('image/png') }), `potvrdio pre-ride listu za ${v.name} (${items.filter(i => i.ok).length}/${items.length})`); };
+}
+
+/* ---------- PLANER IZLAZAKA ---------- */
+function renderPlanner() {
+  const list = S.events.slice().sort((a, b) => a.date.localeCompare(b.date)); const up = list.filter(e => e.date >= today()), past = list.filter(e => e.date < today());
+  const card = e => { const r = S.routes.find(x => x.id === e.routeId); const joined = e.participants.includes(me().name); return `<div class="card ${e.date < today() ? '' : daysBetween(today(), e.date) <= 7 ? 'amber' : ''}"><h3>${ic('planner')} ${esc(e.title)} <span class="r"><span class="tag ${e.date < today() ? 'dim' : 'info'}">${fmtD(e.date)} · ${e.date >= today() ? daysBetween(today(), e.date) + 'd' : 'prošlo'}</span></span></h3>
+      <div class="chips" style="margin-bottom:8px">${e.poiId ? `<button class="chip" data-act="focusPoi" data-id="${e.poiId}">${ic('pin', '')} ${esc(pname(e.poiId))}</button>` : ''}${r ? `<span class="chip">${esc(r.name)} · ${U.dist(pathLength(r.points))}</span>` : ''}<span class="chip">${esc(e.author || '')}</span></div>
+      ${e.notes ? `<p class="muted" style="font-size:12px;margin:0 0 8px">${esc(e.notes)}</p>` : ''}
+      <div class="grid g2" style="gap:10px"><div><h3 style="font-size:11px">Učesnici (${e.participants.length})</h3><div class="online">${e.participants.map(p => `<span><i></i>${esc(p)}</span>`).join('') || '<span class="muted">—</span>'}</div></div>
+      <div><h3 style="font-size:11px">Oprema</h3>${e.gear.map((g, i) => `<label class="chk" style="padding:3px 0;font-size:12px;${g.ok ? 'color:var(--muted)' : ''}"><input type="checkbox" ${g.ok ? 'checked' : ''} data-act="gearToggle" data-id="${e.id}" data-i="${i}"> ${esc(g.t)}</label>`).join('')}</div></div>
+      <div class="actions" style="margin-top:10px">${e.date >= today() ? `<button class="btn sm ${joined ? 'amber' : 'primary'}" data-act="joinEvent" data-id="${e.id}">${joined ? 'Odjavi se' : ic('check') + ' Prijavi se'}</button>` : ''}${can('edit', e.authorId) ? `<button class="btn sm" data-act="eventForm" data-id="${e.id}">${ic('edit')}</button>` : ''}</div></div>`; };
+  $('#v-planner').innerHTML = `<div class="vhead"><h1>${t('nav_planner')}<small>RIDE PLANNER · ${up.length} UPCOMING</small></h1><div class="tools"><button class="btn sm primary" data-act="eventForm">${ic('plus')} Novi izlazak</button></div></div>
+    <div class="grid g2">${up.map(card).join('') || '<div class="empty">Nema planiranih izlazaka</div>'}</div>${past.length ? `<h3 style="margin:18px 0 10px">Prošli</h3><div class="grid g2">${past.slice(-4).reverse().map(card).join('')}</div>` : ''}`;
+}
+function eventForm(id) {
+  const e = id ? S.events.find(x => x.id === id) : { title: '', date: today(), routeId: '', poiId: '', participants: [me().name], gear: [{ t: 'Rezervno gorivo', ok: false }, { t: 'Prva pomoć', ok: false }, { t: 'Alat', ok: false }], notes: '' }; if (!requirePerm(id ? 'edit' : 'add', e.authorId)) return;
+  openModal(`${modalHead(id ? e.title : 'Novi izlazak', 'planner')}<label class="f">Naziv *</label><input id="ev-title" value="${esc(e.title)}"><div class="f2"><div><label class="f">${t('date')}</label><input id="ev-date" type="date" value="${e.date}"></div><div><label class="f">Tačka na mapi</label><select id="ev-poi"><option value="">—</option>${S.pois.map(p => `<option value="${p.id}" ${e.poiId === p.id ? 'selected' : ''}>${esc(p.name)}</option>`).join('')}</select></div></div>
+    <label class="f">${t('route')}</label><select id="ev-route"><option value="">—</option>${S.routes.map(r => `<option value="${r.id}" ${e.routeId === r.id ? 'selected' : ''}>${esc(r.name)} (${U.dist(pathLength(r.points))})</option>`).join('')}</select>
+    <label class="f">Učesnici (zarezom)</label><input id="ev-part" value="${esc(e.participants.join(', '))}"><label class="f">Lista opreme (jedna po liniji)</label><textarea id="ev-gear">${esc(e.gear.map(g => g.t).join('\n'))}</textarea><label class="f">${t('notes')}</label><textarea id="ev-notes">${esc(e.notes)}</textarea>
+    <div class="actions">${id ? `<button class="btn danger" id="ev-del">${ic('trash')}</button>` : ''}<button class="btn ghost" data-act="closeModal">${t('cancel')}</button><button class="btn primary" id="ev-save">${t('save')}</button></div>`);
+  $('#ev-save').onclick = () => { if (!validate(['ev-title'])) return; const gearT = formVal('ev-gear').split('\n').map(x => x.trim()).filter(Boolean); const rec = { title: formVal('ev-title').trim(), date: formVal('ev-date'), poiId: formVal('ev-poi'), routeId: formVal('ev-route'), participants: formVal('ev-part').split(',').map(x => x.trim()).filter(Boolean), gear: gearT.map(tt => ({ t: tt, ok: e.gear.find(g => g.t === tt)?.ok || false })), notes: formVal('ev-notes') }; mutate(s => { if (id) Object.assign(s.events.find(x => x.id === id), rec); else s.events.push({ id: uid(), author: me().name, authorId: me().id, ...rec }); }, (id ? 'izmenio izlazak „' : 'planirao izlazak „') + rec.title + '"'); closeModal(); };
+  if (id) $('#ev-del').onclick = () => confirmBox(t('confirm_delete'), () => { mutate(s => s.events = s.events.filter(x => x.id !== id), 'obrisao izlazak'); closeModal(); });
+}
+
+/* ---------- SOS ---------- */
+let sosPos = null;
+function renderSOS() {
+  const c = sosPos || myPos; const txt = c ? `${c[0].toFixed(6)}, ${c[1].toFixed(6)}` : '—';
+  const msg = encodeURIComponent(`SOS! Treba mi pomoć. Moja lokacija: ${txt} https://maps.google.com/?q=${c ? c.join(',') : ''}`);
+  $('#v-sos').innerHTML = `<div class="vhead"><h1 style="color:var(--red)">${t('nav_sos')}<small>EMERGENCY · 112 EU · 194 HITNA · 192 POLICIJA · 193 VATROGASCI</small></h1></div>
+    <div class="grid g2"><div class="card red"><h3 style="color:var(--amber)">${ic('pin')} Moje trenutne koordinate</h3><div class="sos-big">${txt}</div>
+      <div class="chips"><button class="btn amber" data-act="sosLocate">${ic('nav')} Osveži GPS</button><button class="btn" data-act="copy" data-v="${esc(txt)}" ${c ? '' : 'disabled'}>${ic('copy')} Kopiraj</button></div>
+      <div class="grid g2" style="margin-top:12px;gap:8px"><a class="btn full danger" href="sms:?body=${msg}" ${c ? '' : 'style="opacity:.4;pointer-events:none"'}>${ic('phone')} Pošalji SMS</a><a class="btn full" style="background:rgba(37,211,102,.15);color:#25d366;border-color:#25d36655" href="https://wa.me/?text=${msg}" target="_blank" rel="noopener" ${c ? '' : 'style="opacity:.4;pointer-events:none"'}>WhatsApp</a></div>
+      ${c ? `<a class="muted" style="font-size:11px;display:block;margin-top:8px" href="https://maps.google.com/?q=${c.join(',')}" target="_blank">Google Maps link</a>` : '<p class="muted" style="font-size:12px">Klikni „Osveži GPS" da dobiješ koordinate.</p>'}</div>
+    <div class="card"><h3>${ic('phone')} Kontakti za hitne slučajeve <span class="r"><button class="btn xs" data-act="contactForm">${ic('plus')}</button></span></h3>${S.contacts.map((k, i) => `<div class="li"><div class="t"><b>${esc(k.name)}</b><small class="mono">${esc(k.phone)}</small></div><a class="btn sm" href="tel:${esc(k.phone.replace(/\s/g, ''))}">${ic('phone')} Pozovi</a><button class="btn xs ghost" data-act="delContact" data-i="${i}">${ic('x')}</button></div>`).join('')}
+      <h3 style="margin-top:14px">Medicinski podaci / napomena</h3><textarea id="sosNote" placeholder="krvna grupa, alergije, lekovi, osiguranje...">${esc(S.settings.sosNote || '')}</textarea><button class="btn sm" id="sosNoteSave" style="margin-top:6px">${t('save')}</button></div></div>`;
+  $('#sosNoteSave').onclick = () => { S.settings.sosNote = formVal('sosNote'); persist(); toast(t('saved')); };
+}
+function contactForm() { openModal(`${modalHead('Kontakt', 'phone')}<label class="f">Ime</label><input id="ct-name"><label class="f">Telefon</label><input id="ct-phone" type="tel"><div class="actions"><button class="btn ghost" data-act="closeModal">${t('cancel')}</button><button class="btn primary" id="ct-save">${t('save')}</button></div>`); $('#ct-save').onclick = () => { if (!validate(['ct-name', 'ct-phone'])) return; mutate(s => s.contacts.push({ name: formVal('ct-name'), phone: formVal('ct-phone') }), 'dodao SOS kontakt', { silent: true }); closeModal(); }; }
+
+/* ---------- ANALITIKA ---------- */
+function renderAnalytics() {
+  const months = []; for (let i = 11; i >= 0; i--) { const d = new Date(); d.setMonth(d.getMonth() - i); months.push(d.toISOString().slice(0, 7)); }
+  const byPoi = {}; S.trips.forEach(tr => { if (tr.poiId) { byPoi[tr.poiId] = byPoi[tr.poiId] || { n: 0, h: 0 }; byPoi[tr.poiId].n++; byPoi[tr.poiId].h += tr.hours; } });
+  const topPoi = Object.entries(byPoi).sort((a, b) => b[1].n - a[1].n).slice(0, 6);
+  const condCount = {}; S.trips.forEach(tr => (tr.conditions || []).forEach(c => condCount[c] = (condCount[c] || 0) + 1));
+  $('#v-analytics').innerHTML = `<div class="vhead"><h1>${t('nav_analytics')}<small>LAST 12 MONTHS · ${S.trips.length} TRIPS</small></h1></div>
+    <div class="grid g2"><div class="card"><h3>Sati po mesecu</h3><div style="height:240px"><canvas class="chart" id="anHours"></canvas></div></div><div class="card"><h3>Troškovi po vozilu (12 m)</h3><div style="height:240px"><canvas class="chart" id="anCost"></canvas></div></div>
+    <div class="card"><h3>Najčešće staze</h3>${topPoi.map(([id, x]) => `<div class="li" data-act="focusPoi" data-id="${id}" style="cursor:pointer"><div class="t"><b>${esc(pname(id))}</b><small>${x.n} vožnji · ${n1(x.h)} h</small></div><div class="bar" style="width:40%"><i style="width:${x.n / topPoi[0][1].n * 100}%"></i></div></div>`).join('') || '<div class="empty">—</div>'}</div>
+    <div class="card"><h3>Poređenje vozila</h3><div class="tscroll"><table><tr><th></th>${S.vehicles.map(v => `<th class="num">${esc(v.name)}</th>`).join('')}</tr>
+      ${[['Sati ukupno', v => n1(v.hours)], ['Km ukupno', v => n0(v.km)], ['Vožnji (12 m)', v => S.trips.filter(x => x.vehicleId === v.id && months.includes(monthKey(x.date))).length], ['Sati (12 m)', v => n1(S.trips.filter(x => x.vehicleId === v.id && months.includes(monthKey(x.date))).reduce((a, x) => a + x.hours, 0))], ['Prosek h / vožnja', v => { const tr = S.trips.filter(x => x.vehicleId === v.id); return tr.length ? n1(tr.reduce((a, x) => a + x.hours, 0) / tr.length) : '—'; }], ['Trošak / h', v => v.hours ? money(costRows().filter(r => r.vehicleId === v.id).reduce((a, r) => a + r.amt, 0) / v.hours) : '—'], ['Potrošnja L/h', v => fuelAvg(v).perH ? n1(fuelAvg(v).perH) : '—'], ['Prekoračeni intervali', v => v.services.filter(s => svcStatus(v, s).level === 'bad').length]].map(([l, f]) => `<tr><td>${l}</td>${S.vehicles.map(v => `<td class="num">${f(v)}</td>`).join('')}</tr>`).join('')}</table></div>
+      <h3 style="margin-top:12px">Uslovi terena</h3><div class="chips">${Object.entries(condCount).sort((a, b) => b[1] - a[1]).map(([c, n]) => `<span class="tag dim">${t('cond_' + c)} × ${n}</span>`).join('') || '—'}</div></div></div>`;
+  if (typeof Chart === 'undefined') return; const colors = ['#00e5ff', '#ffb020', '#b388ff', '#2ee6a6'];
+  new Chart($('#anHours'), { type: 'line', data: { labels: months.map(m => m.slice(2)), datasets: S.vehicles.map((v, i) => ({ label: v.name, data: months.map(m => S.trips.filter(x => x.vehicleId === v.id && monthKey(x.date) === m).reduce((a, x) => a + x.hours, 0)), borderColor: colors[i % 4], backgroundColor: colors[i % 4] + '22', fill: true, tension: .35, pointRadius: 3 })) }, options: chartOpts({ legend: true, zero: true, y: 'h' }) });
+  new Chart($('#anCost'), { type: 'bar', data: { labels: S.vehicles.map(v => v.name), datasets: ['Servis', 'Gorivo'].map((c, i) => ({ label: c, data: S.vehicles.map(v => costRows().filter(r => r.vehicleId === v.id && r.cat === c && months.includes(monthKey(r.date))).reduce((a, r) => a + r.amt, 0)), backgroundColor: [colors[0] + 'cc', colors[1] + 'cc'][i], borderRadius: 4 })) }, options: chartOpts({ legend: true, zero: true, y: 'RSD' }) });
+}
+
+/* ---------- TIM ---------- */
+function renderTeam() {
+  const online = cloud.enabled ? cloud.presence || [] : [me().name];
+  $('#v-team').innerHTML = `<div class="vhead"><h1>${t('nav_team')}<small>${cloud.enabled ? 'FIRESTORE SYNC ACTIVE' : 'LOCAL MODE · FIREBASE NOT CONFIGURED'}</small></h1><div class="tools"><button class="btn sm" data-act="openUser">${ic('login')} ${t('login')}</button>${me().role === 'admin' ? `<button class="btn sm" data-act="userForm">${ic('plus')} Korisnik</button>` : ''}</div></div>
+    <div class="grid g3"><div class="card"><h3>${ic('team')} ${t('online_now')}</h3><div class="online">${online.map(n => `<span><i></i>${esc(n)}</span>`).join('')}</div>
+      <h3 style="margin-top:14px">Korisnici</h3>${S.users.map(u => `<div class="li"><div class="av" style="width:28px;height:28px;border-radius:50%;background:linear-gradient(135deg,var(--cyan),var(--purple));display:grid;place-items:center;font-size:12px;font-weight:700;color:#000">${esc(u.name.slice(0, 1))}</div><div class="t"><b>${esc(u.name)} ${u.id === me().id ? '<span class="tag info">ti</span>' : ''}</b><small>${t(u.role)}${u.email ? ' · ' + esc(u.email) : ''}</small></div>${me().role === 'admin' ? `<button class="btn xs ghost" data-act="userForm" data-id="${u.id}">${ic('edit')}</button>` : ''}</div>`).join('')}</div>
+    <div class="card span2"><h3>${ic('clock')} ${t('activity')} (${S.activity.length})</h3><div class="feed" style="max-height:60vh;overflow:auto">${S.activity.map(a => `<div class="li"><div class="t"><small style="color:var(--text)"><b>${esc(a.user)}</b> ${esc(a.text)}</small><small>${new Date(a.date).toLocaleString('sr-Latn')}</small></div></div>`).join('') || '<div class="empty">—</div>'}</div></div></div>
+    <div class="card" style="margin-top:14px"><h3>${ic('cloud')} Zajednička baza (Firebase)</h3><p class="muted" style="font-size:12px">${cloud.enabled ? 'Povezano. Sve izmene se sinhronizuju u realnom vremenu sa svim članovima.' : 'Firebase nije konfigurisan – aplikacija radi lokalno. Za deljenje sa timom: Podešavanja → Firebase konfiguracija, ili koristi Export/Import JSON.'}</p></div>`;
+}
+function openUser() {
+  openModal(`${modalHead(t('login'), 'login')}
+    <h3>Lokalni korisnik</h3><select id="lu-sel">${S.users.map(u => `<option value="${u.id}" ${u.id === me().id ? 'selected' : ''}>${esc(u.name)} (${t(u.role)})</option>`).join('')}<option value="">${t('guest')}</option></select>
+    <button class="btn full" id="lu-go" style="margin-top:8px">${ic('check')} Prebaci korisnika</button>
+    <h3 style="margin-top:16px">Firebase nalog ${cloud.enabled ? '<span class="tag ok">aktivan</span>' : '<span class="tag dim">nije konfigurisan</span>'}</h3>
+    ${cloud.enabled ? (cloud.user ? `<div class="li"><div class="t"><b>${esc(cloud.user.displayName || cloud.user.email)}</b><small>${esc(cloud.user.email || '')}</small></div><button class="btn sm danger" id="fb-out">${t('logout')}</button></div>` : `<button class="btn full" id="fb-google">Google prijava</button><div class="f2" style="margin-top:8px"><input id="fb-email" placeholder="email"><input id="fb-pass" type="password" placeholder="lozinka"></div><div class="f2" style="margin-top:8px"><button class="btn" id="fb-login">Prijava</button><button class="btn ghost" id="fb-reg">Registracija</button></div>`) : '<p class="muted" style="font-size:12px">Unesi Firebase konfiguraciju u Podešavanjima da bi tim delio istu bazu.</p>'}`);
+  $('#lu-go').onclick = () => { S.settings.currentUser = formVal('lu-sel') || null; persist(); renderAll(); closeModal(); toast('Korisnik: ' + me().name); };
+  if (cloud.enabled) { const g = $('#fb-google'); if (g) g.onclick = () => fbLogin('google'); const l = $('#fb-login'); if (l) l.onclick = () => fbLogin('email', formVal('fb-email'), formVal('fb-pass')); const r = $('#fb-reg'); if (r) r.onclick = () => fbLogin('register', formVal('fb-email'), formVal('fb-pass')); const o = $('#fb-out'); if (o) o.onclick = () => cloud.auth.signOut().then(() => { closeModal(); toast('Odjavljen'); }); }
+}
+function userForm(id) {
+  const u = id ? S.users.find(x => x.id === id) : { name: '', role: 'member', email: '' };
+  openModal(`${modalHead(id ? u.name : 'Novi korisnik', 'team')}<label class="f">Ime</label><input id="us-name" value="${esc(u.name)}"><label class="f">Email (za Firebase mapiranje)</label><input id="us-email" value="${esc(u.email)}"><label class="f">${t('role')}</label><select id="us-role">${['admin', 'member', 'guest'].map(r => `<option value="${r}" ${u.role === r ? 'selected' : ''}>${t(r)}</option>`).join('')}</select>
+    <div class="actions">${id && id !== me().id ? `<button class="btn danger" id="us-del">${ic('trash')}</button>` : ''}<button class="btn ghost" data-act="closeModal">${t('cancel')}</button><button class="btn primary" id="us-save">${t('save')}</button></div>`);
+  $('#us-save').onclick = () => { if (!validate(['us-name'])) return; const rec = { name: formVal('us-name').trim(), email: formVal('us-email').trim(), role: formVal('us-role') }; mutate(s => { if (id) Object.assign(s.users.find(x => x.id === id), rec); else s.users.push({ id: uid(), ...rec }); }, (id ? 'izmenio korisnika ' : 'dodao korisnika ') + rec.name, { silent: true }); closeModal(); };
+  const d = $('#us-del'); if (d) d.onclick = () => { mutate(s => s.users = s.users.filter(x => x.id !== id), 'obrisao korisnika'); closeModal(); };
+}
+
+/* ---------- PODEŠAVANJA ---------- */
+function renderSettings() {
+  const fb = S.settings.firebase || {};
+  $('#v-settings').innerHTML = `<div class="vhead"><h1>${t('nav_settings')}<small>CONFIGURATION · v1.0 · ${new Blob([localStorage.getItem(STORE_KEY) || '']).size > 1e6 ? (new Blob([localStorage.getItem(STORE_KEY)]).size / 1e6).toFixed(1) + ' MB' : Math.round(new Blob([localStorage.getItem(STORE_KEY) || '']).size / 1024) + ' KB'} LOCAL DATA</small></h1></div>
+    <div class="grid g2">
+      <div class="card"><h3>${ic('settings')} Interfejs</h3>
+        <div class="f3"><div><label class="f">${t('language')}</label><select id="st-lang"><option value="sr" ${S.settings.lang === 'sr' ? 'selected' : ''}>Srpski</option><option value="en" ${S.settings.lang === 'en' ? 'selected' : ''}>English</option></select></div>
+        <div><label class="f">${t('theme')}</label><select id="st-theme"><option value="dark" ${S.settings.theme === 'dark' ? 'selected' : ''}>${t('dark')}</option><option value="light" ${S.settings.theme === 'light' ? 'selected' : ''}>${t('light')}</option></select></div>
+        <div><label class="f">${t('units')}</label><select id="st-units"><option value="km" ${S.settings.units === 'km' ? 'selected' : ''}>km / °C</option><option value="mi" ${S.settings.units === 'mi' ? 'selected' : ''}>mi / °F</option></select></div></div>
+        <label class="chk" style="margin-top:10px"><input type="checkbox" id="st-notif" ${S.settings.notif ? 'checked' : ''}> ${t('notifications')} <span class="tag dim">${'Notification' in window ? Notification.permission : 'n/a'}</span></label>
+        <label class="f">PWA</label><p class="muted" style="font-size:12px;margin:0">Instalacija: meni pretraživača → „Dodaj na početni ekran" / „Install app". Offline keširanje mape radi kad je <code>sw.js</code> pored ovog fajla na HTTPS hostu. <span id="swStatus" class="tag dim">SW: ${navigator.serviceWorker?.controller ? 'aktivan' : 'nije aktivan'}</span></p>
+        <button class="btn sm" data-act="cacheTiles" style="margin-top:8px">${ic('down')} Keširaj mapu za trenutno područje</button></div>
+      <div class="card"><h3>${ic('down')} ${t('backup')}</h3><p class="muted" style="font-size:12px">Celokupna baza (vozila, servisi, tačke, rute, slike) u jednom JSON fajlu – za ručno deljenje sa timom ili prenos na drugi telefon.</p>
+        <div class="chips"><button class="btn" data-act="exportJson">${ic('down')} Export JSON</button><label class="btn" style="cursor:pointer">${ic('up')} Import JSON<input type="file" accept=".json" class="hidden" id="importJson"></label><button class="btn" data-act="exportGpx">GPX sve</button></div>
+        <label class="f" style="margin-top:14px">Opasna zona</label><div class="chips"><button class="btn danger sm" data-act="resetDemo">Vrati demo podatke</button><button class="btn danger sm" data-act="resetAll">${t('reset')}</button></div></div>
+    </div>
+    <div class="card" style="margin-top:14px"><h3>${ic('cloud')} Firebase konfiguracija (zajednička baza za tim)</h3>
+      <p class="muted" style="font-size:12px">1) console.firebase.google.com → Add project (besplatan Spark plan) · 2) Build → Firestore Database → Create (production mode) · 3) Build → Authentication → Sign-in method: uključi Google i Email/Password · 4) Project settings → Your apps → Web app (&lt;/&gt;) → kopiraj <code>firebaseConfig</code> vrednosti ovde · 5) Firestore Rules: <code>allow read, write: if request.auth != null;</code> · 6) Authentication → Settings → Authorized domains: dodaj domen gde je hostovana aplikacija.</p>
+      <div class="f3"><div><label class="f">apiKey</label><input id="fb-apiKey" value="${esc(fb.apiKey || '')}"></div><div><label class="f">authDomain</label><input id="fb-authDomain" value="${esc(fb.authDomain || '')}" placeholder="xxx.firebaseapp.com"></div><div><label class="f">projectId</label><input id="fb-projectId" value="${esc(fb.projectId || '')}"></div>
+      <div><label class="f">storageBucket</label><input id="fb-storageBucket" value="${esc(fb.storageBucket || '')}"></div><div><label class="f">messagingSenderId</label><input id="fb-messagingSenderId" value="${esc(fb.messagingSenderId || '')}"></div><div><label class="f">appId</label><input id="fb-appId" value="${esc(fb.appId || '')}"></div></div>
+      <div class="chips" style="margin-top:10px"><button class="btn primary" id="fb-save">${ic('check')} Sačuvaj i poveži</button><button class="btn ghost" id="fb-clear">Isključi (lokalni mod)</button><span class="tag ${cloud.enabled ? 'ok' : 'dim'}">${cloud.enabled ? 'POVEZANO' : 'LOKALNO'}</span></div></div>`;
+  $('#st-lang').onchange = e => { S.settings.lang = e.target.value; persist(); renderAll(); };
+  $('#st-theme').onchange = e => { S.settings.theme = e.target.value; applyTheme(); persist(); };
+  $('#st-units').onchange = e => { S.settings.units = e.target.value; S.settings.tempUnit = e.target.value === 'mi' ? 'F' : 'C'; persist(); renderAll(); };
+  $('#st-notif').onchange = async e => { if (e.target.checked && 'Notification' in window) { const p = await Notification.requestPermission(); S.settings.notif = p === 'granted'; if (S.settings.notif) notify('TRAILCOMMAND', 'Notifikacije uključene'); } else S.settings.notif = false; persist(); renderSettings(); };
+  $('#importJson').onchange = e => { const f = e.target.files[0]; if (!f) return; const r = new FileReader(); r.onload = () => { try { const d = JSON.parse(r.result); if (!d.vehicles || !d.pois) throw 0; confirmBox('Zameniti sve podatke podacima iz fajla?', () => { undoStack.push(JSON.stringify(S)); S = Object.assign(emptyState(), d); persist(); renderAll(); toast('Podaci uvezeni'); }); } catch (x) { toast('Neispravan JSON', true); } }; r.readAsText(f); };
+  $('#fb-save').onclick = () => { const cfg = {}; ['apiKey', 'authDomain', 'projectId', 'storageBucket', 'messagingSenderId', 'appId'].forEach(k => cfg[k] = formVal('fb-' + k).trim()); if (!cfg.apiKey || !cfg.projectId) { toast('apiKey i projectId su obavezni', true); return; } S.settings.firebase = cfg; persist(); initCloud(); };
+  $('#fb-clear').onclick = () => { S.settings.firebase = null; persist(); cloudStop(); renderAll(); toast('Lokalni mod'); };
+}
+function applyTheme() { document.documentElement.dataset.theme = S.settings.theme; $('meta[name=theme-color]').content = S.settings.theme === 'dark' ? '#0b0f14' : '#eef2f6'; }
+async function cacheTiles() {
+  if (!map) { toast('Otvori prvo mapu', true); return; } if (!navigator.serviceWorker?.controller) { toast('Service worker nije aktivan (treba sw.js + HTTPS)', true); return; }
+  const b = map.getBounds(), z0 = Math.max(10, map.getZoom()), urls = []; const tpl = S.settings.mapLayer === 'sat' ? 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}' : S.settings.mapLayer === 'topo' ? 'https://a.tile.opentopomap.org/{z}/{x}/{y}.png' : 'https://a.tile.openstreetmap.org/{z}/{x}/{y}.png';
+  const t2 = (lat, lng, z) => [Math.floor((lng + 180) / 360 * 2 ** z), Math.floor((1 - Math.log(Math.tan(lat * Math.PI / 180) + 1 / Math.cos(lat * Math.PI / 180)) / Math.PI) / 2 * 2 ** z)];
+  for (let z = z0; z <= Math.min(z0 + 3, 16); z++) { const [x1, y1] = t2(b.getNorth(), b.getWest(), z), [x2, y2] = t2(b.getSouth(), b.getEast(), z); for (let x = x1; x <= x2; x++) for (let y = y1; y <= y2; y++) urls.push(tpl.replace('{z}', z).replace('{x}', x).replace('{y}', y)); if (urls.length > 600) break; }
+  toast(`Preuzimam ${urls.length} pločica…`); let ok = 0; for (const u of urls.slice(0, 600)) { try { await fetch(u, { mode: 'no-cors' }); ok++; } catch (e) { } } toast(`Keširano ${ok} pločica za offline`);
+}
+</script>
+<script>
+/* ================================================================== */
+/*  CLOUD – Firebase (Firestore + Auth), opciono                      */
+/*  ------------------------------------------------------------------
+    KAKO NAPRAVITI BESPLATAN FIREBASE PROJEKAT:
+    1. https://console.firebase.google.com → "Add project" (Spark plan je besplatan)
+    2. Build → Firestore Database → Create database (production mode, region europe-west)
+    3. Build → Authentication → Get started → Sign-in method: Google + Email/Password
+    4. Project settings (zupčanik) → Your apps → Web (</>) → Register app → kopiraj firebaseConfig
+    5. Unesi vrednosti u Podešavanja → Firebase konfiguracija (ili ih upiši ovde u FIREBASE_CONFIG)
+    6. Firestore → Rules:
+         rules_version = '2';
+         service cloud.firestore {
+           match /databases/{database}/documents {
+             match /{document=**} { allow read, write: if request.auth != null; }
+           }
+         }
+    7. Authentication → Settings → Authorized domains → dodaj domen hosta (npr. korisnik.github.io)
+    Uloge: prvi prijavljeni korisnik čiji email odgovara korisniku u listi "Tim" dobija tu ulogu;
+    nepoznat email = Član. Admin menja uloge u modulu Tim.
+   ------------------------------------------------------------------ */
+const FIREBASE_CONFIG = null; /* ili: { apiKey:"...", authDomain:"...", projectId:"...", storageBucket:"...", messagingSenderId:"...", appId:"..." } */
+const SYNC_COLLECTIONS = ['users', 'vehicles', 'pois', 'routes', 'services', 'trips', 'fuel', 'parts', 'checklists', 'events', 'activity', 'contacts'];
+let cloudLastPushed = {}; let presenceTimer = null; let applyingRemote = false;
+
+function loadScript(src) { return new Promise((res, rej) => { const s = document.createElement('script'); s.src = src; s.onload = res; s.onerror = rej; document.head.appendChild(s); }); }
+async function initCloud() {
+  const cfg = S.settings.firebase || FIREBASE_CONFIG; if (!cfg || !cfg.apiKey) return;
+  try {
+    if (!window.firebase) { const v = '10.12.2'; await loadScript(`https://www.gstatic.com/firebasejs/${v}/firebase-app-compat.js`); await loadScript(`https://www.gstatic.com/firebasejs/${v}/firebase-auth-compat.js`); await loadScript(`https://www.gstatic.com/firebasejs/${v}/firebase-firestore-compat.js`); }
+    if (!firebase.apps.length) firebase.initializeApp(cfg);
+    cloud.db = firebase.firestore(); cloud.auth = firebase.auth(); cloud.enabled = true;
+    try { await cloud.db.enablePersistence({ synchronizeTabs: true }); } catch (e) { }
+    cloud.auth.onAuthStateChanged(u => { cloud.user = u; if (u) { mapAuthUser(u); cloudSubscribe(); startPresence(); toast('Cloud: ' + (u.displayName || u.email)); } else { cloudUnsubscribe(); } renderAll(); });
+    renderAll(); toast('Firebase povezan – prijavi se');
+  } catch (e) { console.error(e); cloud.enabled = false; toast('Firebase greška: ' + e.message, true); }
+}
+function cloudStop() { cloudUnsubscribe(); cloud.enabled = false; cloud.user = null; }
+function mapAuthUser(u) {
+  let local = S.users.find(x => x.email && u.email && x.email.toLowerCase() === u.email.toLowerCase());
+  if (!local) { local = { id: 'fb-' + u.uid, name: u.displayName || u.email.split('@')[0], role: S.users.length ? 'member' : 'admin', email: u.email || '' }; S.users.push(local); }
+  S.settings.currentUser = local.id; persist();
+}
+async function fbLogin(kind, email, pass) {
+  try {
+    if (kind === 'google') await cloud.auth.signInWithPopup(new firebase.auth.GoogleAuthProvider());
+    else if (kind === 'email') await cloud.auth.signInWithEmailAndPassword(email, pass);
+    else await cloud.auth.createUserWithEmailAndPassword(email, pass);
+    closeModal();
+  } catch (e) { toast(e.message, true); }
+}
+/* Firestore model: kolekcija po tipu, dokument po stavci (id = item.id) */
+function cloudSubscribe() {
+  cloudUnsubscribe();
+  SYNC_COLLECTIONS.forEach(col => {
+    const unsub = cloud.db.collection('tc_' + col).onSnapshot(snap => {
+      if (snap.metadata.hasPendingWrites) return;
+      const remote = snap.docs.map(d => d.data()); if (!snap.size && S[col].length) { cloudPushCollection(col); return; } /* prazna baza → inicijalno popuni */
+      applyingRemote = true; S[col] = col === 'activity' ? remote.sort((a, b) => b.date.localeCompare(a.date)).slice(0, 200) : remote; cloudLastPushed[col] = JSON.stringify(S[col]); persist(); applyingRemote = false; renderAll();
+    }, err => toast('Sync greška: ' + err.message, true));
+    cloud.unsub.push(unsub);
+  });
+  const pu = cloud.db.collection('tc_presence').onSnapshot(snap => { const now = Date.now(); cloud.presence = snap.docs.map(d => d.data()).filter(p => now - p.lastSeen < 120000).map(p => p.name); if (S.settings.view === 'team') renderTeam(); });
+  cloud.unsub.push(pu);
+}
+function cloudUnsubscribe() { cloud.unsub.forEach(u => u()); cloud.unsub = []; clearInterval(presenceTimer); }
+function cloudPush() { if (!cloud.enabled || !cloud.user || applyingRemote) return; SYNC_COLLECTIONS.forEach(col => { if (JSON.stringify(S[col]) !== cloudLastPushed[col]) cloudPushCollection(col); }); }
+async function cloudPushCollection(col) {
+  try {
+    const ref = cloud.db.collection('tc_' + col); const prev = cloudLastPushed[col] ? JSON.parse(cloudLastPushed[col]) : []; const batch = cloud.db.batch();
+    const keyOf = (x, i) => x.id || (col === 'contacts' ? 'c-' + i : 'x-' + i);
+    S[col].forEach((item, i) => { const k = keyOf(item, i); const p = prev.find((y, j) => keyOf(y, j) === k); if (!p || JSON.stringify(p) !== JSON.stringify(item)) batch.set(ref.doc(k), JSON.parse(JSON.stringify({ ...item, id: k }))); });
+    prev.forEach((item, i) => { const k = keyOf(item, i); if (!S[col].some((y, j) => keyOf(y, j) === k)) batch.delete(ref.doc(k)); });
+    await batch.commit(); cloudLastPushed[col] = JSON.stringify(S[col]);
+  } catch (e) { toast('Upis u cloud nije uspeo: ' + e.message, true); }
+}
+function startPresence() { const beat = () => cloud.db.collection('tc_presence').doc(cloud.user.uid).set({ name: me().name, lastSeen: Date.now() }).catch(() => { }); beat(); clearInterval(presenceTimer); presenceTimer = setInterval(beat, 30000); }
+function syncNow() { const b = $('#syncBtn'); b.classList.add('spin'); if (cloud.enabled && cloud.user) { cloudLastPushed = {}; cloudPush(); toast('Sinhronizacija…'); } else toast(cloud.enabled ? 'Prijavi se za sinhronizaciju' : 'Lokalni mod – nema cloud sinhronizacije'); setTimeout(() => b.classList.remove('spin'), 1200); }
+
+/* ================================================================== */
+/*  PWA – manifest (data URI) + service worker (sw.js pored fajla)     */
+/* ================================================================== */
+function setupPWA() {
+  const manifest = { name: 'TRAILCOMMAND – Off-Road Operations', short_name: 'TrailCommand', start_url: location.href.split('#')[0], display: 'standalone', background_color: '#0b0f14', theme_color: '#0b0f14', icons: [{ src: faviconData(), sizes: '192x192 512x512', type: 'image/svg+xml', purpose: 'any' }] };
+  $('#manifestLink').href = 'data:application/manifest+json,' + encodeURIComponent(JSON.stringify(manifest));
+  const fav = document.createElement('link'); fav.rel = 'icon'; fav.href = faviconData(); document.head.appendChild(fav);
+  const ati = document.createElement('link'); ati.rel = 'apple-touch-icon'; ati.href = faviconData(); document.head.appendChild(ati);
+  if ('serviceWorker' in navigator && location.protocol.startsWith('http')) navigator.serviceWorker.register('sw.js').then(() => console.log('SW ok')).catch(() => console.log('sw.js nije pronađen – offline keširanje isključeno'));
+}
+
+/* ================================================================== */
+/*  INIT – događaji (delegacija preko data-act), prečice, start       */
+/* ================================================================== */
+const ACTIONS = {
+  go: d => go(d.v), goView: d => { closeModal(); go(d.id); }, goFleet: d => { fleetVid = d.id; closeModal(); go('fleet'); }, selVeh: d => { fleetVid = d.id; renderFleet(); }, selCheckVeh: d => { checkVid = d.id; renderChecklist(); },
+  closeModal: () => closeModal(), undo: () => undo(), search: () => openSearch(), sync: () => syncNow(), openUser: () => openUser(), userForm: d => userForm(d.id),
+  layer: d => setLayer(d.v), toggleHeat: () => toggleHeat(), drawRoute: () => mode === 'draw' ? cancelDraw() : startDraw(), finishDraw: () => finishDraw(), cancelDraw: () => cancelDraw(), measure: () => startMeasure(), locate: () => locate(),
+  addPoiCoords: () => openPoiForm(null, map ? map.getCenter() : { lat: 44.0, lng: 20.9 }), poiHere: () => myPos && openPoiForm(null, { lat: myPos[0], lng: myPos[1] }), focusPoi: d => focusPoi(d.id), poiDetail: d => poiDetail(d.id), editPoi: d => openPoiForm(d.id),
+  delPoi: d => confirmBox(t('confirm_delete'), () => { const p = S.pois.find(x => x.id === d.id); if (!requirePerm('delete', p.authorId)) return; mutate(s => { s.pois = s.pois.filter(x => x.id !== d.id); s.trips.forEach(tr => { if (tr.poiId === d.id) tr.poiId = ''; }); }, `obrisao tačku „${p.name}"`); closeModal(); }),
+  rate: d => ratePoi(d.id, +d.v), comment: d => commentPoi(d.id), weather: d => loadWeather(d.id), navigate: d => navigateTo(d.lat, d.lng), tripFromPoi: d => tripForm(null, null, d.id),
+  elevation: d => showElevation(d.id), exportRoute: d => { const r = S.routes.find(x => x.id === d.id); download(r.name.replace(/\W+/g, '_') + '.gpx', gpxString([r], []), 'application/gpx+xml'); }, routeStart: d => { const r = S.routes.find(x => x.id === d.id); navigateTo(r.points[0][0], r.points[0][1]); }, delRoute: d => delRoute(d.id),
+  exportGpx: () => download('trailcommand.gpx', gpxString(S.routes, S.pois), 'application/gpx+xml'), exportKml: () => download('trailcommand.kml', kmlString(S.routes, S.pois), 'application/vnd.google-earth.kml+xml'),
+  vehForm: d => vehForm(d.id), delVeh: d => delVeh(d.id), svcItemForm: d => svcItemForm(d.id, d.item), svcForm: d => svcForm(d.id, d.item, d.edit), svcDetail: d => svcDetail(d.id), printService: () => printService(), csvService: () => csvService(),
+  tripForm: d => tripForm(d.id, d.edit), csvTrips: () => csvTrips(), fuelForm: d => fuelForm(d.edit), partForm: d => partForm(d.id), partQty: d => mutate(s => { const p = s.parts.find(x => x.id === d.id); p.qty = Math.max(0, p.qty + (+d.d)); }, null), csvCosts: () => csvCosts(),
+  eventForm: d => eventForm(d.id), joinEvent: d => mutate(s => { const e = s.events.find(x => x.id === d.id); const n = me().name; e.participants = e.participants.includes(n) ? e.participants.filter(x => x !== n) : [...e.participants, n]; }, `promenio prijavu za „${S.events.find(x => x.id === d.id).title}"`, { silent: true }),
+  gearToggle: d => mutate(s => { const g = s.events.find(x => x.id === d.id).gear[+d.i]; g.ok = !g.ok; }, null),
+  sosLocate: () => locate(p => { sosPos = p; renderSOS(); }), contactForm: () => contactForm(), delContact: d => mutate(s => s.contacts.splice(+d.i, 1), 'obrisao kontakt'),
+  copy: d => { navigator.clipboard?.writeText(d.v).then(() => toast('Kopirano: ' + d.v)).catch(() => toast('Kopiranje nije dozvoljeno', true)); },
+  exportJson: () => download(`trailcommand-backup-${today()}.json`, JSON.stringify(S, null, 1), 'application/json'),
+  resetDemo: () => confirmBox('Vratiti demo podatke? Trenutni podaci se brišu.', () => { undoStack.push(JSON.stringify(S)); const st = S.settings; S = emptyState(); S.settings = { ...st }; seedDemo(); S.settings = { ...S.settings, ...st, currentUser: S.settings.currentUser }; persist(); renderAll(); }),
+  resetAll: () => confirmBox(t('reset') + '?', () => { undoStack.push(JSON.stringify(S)); S = emptyState(); S.users = [{ id: 'u-admin', name: 'Admin', role: 'admin', email: '' }]; S.settings.currentUser = 'u-admin'; persist(); renderAll(); }),
+  cacheTiles: () => cacheTiles(),
+};
+document.addEventListener('click', e => {
+  const el = e.target.closest('[data-act]'); if (!el) return;
+  if (el.tagName === 'INPUT' && el.type === 'checkbox') { /* gearToggle preko change */ return; }
+  const act = ACTIONS[el.dataset.act]; if (act) { e.preventDefault(); act(el.dataset, el); }
+});
+document.addEventListener('change', e => { const el = e.target.closest('input[type=checkbox][data-act]'); if (el && ACTIONS[el.dataset.act]) ACTIONS[el.dataset.act](el.dataset, el); });
+$('#modal').addEventListener('click', e => { if (e.target === $('#modal')) closeModal(); });
+document.addEventListener('keydown', e => { if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); openSearch(); } if (e.key === 'Escape') closeModal(); if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z' && !['INPUT', 'TEXTAREA'].includes(document.activeElement.tagName)) { e.preventDefault(); undo(); } });
+window.addEventListener('online', renderTopbar); window.addEventListener('offline', renderTopbar);
+window.addEventListener('resize', () => map && map.invalidateSize());
+
+/* START */
+load(); applyTheme(); setupPWA(); renderAll(); tickClock(); setInterval(tickClock, 1000);
+$('#undoBtn').style.opacity = .4;
+if (!S.settings.view || !$('#v-' + S.settings.view)) S.settings.view = 'dashboard';
+go(S.settings.view);
+setTimeout(notifyOverdueOnLoad, 1500);
+initCloud();
+</script>
+</body>
+</html>
